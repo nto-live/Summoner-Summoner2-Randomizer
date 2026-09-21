@@ -70,7 +70,7 @@ place.** What the user does with the ISO afterwards is their business.
 | **Doors solved**: destination is the inline `$Trigger:` name; 218-patch remap applied | done | `DOOR-REMAP.md` |
 | **Door remap verified in game** (2026-09-21) | done | two discs differing by one rewritten destination load two different levels — `DOOR-REMAP.md` §4.5 |
 | **Headless gameplay** (PCSX2, no display, no pad) | done | Software renderer required; Vulkan freezes the game silently — `COMPILED-CODE.md` §8 |
-| **Enemies**: remove / randomise / swarm / difficulty dial | implemented, partly verified | catacombs 96 → 18 live entities with "No Enemies"; `ENEMIES.md` |
+| **Enemies**: remove / randomise / swarm / difficulty dial | implemented; removal **verified in game** against a control | combined no-enemies + remapped-door disc: every visited level holds fewer living entities (Liangshan 100 → 17, sewer 65 → 12); `ENEMIES.md` §4 |
 | End-user packaging (app + frozen engine, no Python) | done | `desktop/PACKAGING.md` §5 |
 | Engine testing surface: `--verify`, `--report`, `--log`, `-v` | done | `--verify` proves "0 changed bytes outside TABLES.VPP" |
 

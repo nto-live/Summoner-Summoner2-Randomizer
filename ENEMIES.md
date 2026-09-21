@@ -199,6 +199,38 @@ whole 110-second run, three boots in a row. Those strings are evidently not vali
 identifiers, and an invalid one takes the level load down with it. The transform now **refuses**
 with that reason instead of shipping it, and `how="both"` does the navpoint lever only.
 
+### Combined with the door remap, against a control — 2026-09-21
+
+The piece that matters for a real build: **no enemies *and* 218 remapped door destinations in one
+disc**, checked against a control that differs only in the enemy pass.
+
+| Check | Result |
+|---|---|
+| boots, boot ELF executes | PASS (`EntryPoint = 0x00100008 is executing`) |
+| reaches gameplay unattended | PASS — first level ~55 s after launch |
+| the remapped door fires | PASS — `masad`'s door loads **`lenele1e`** (vanilla: `worldmap1`), then the chain continues: `sewer` → `lenele3d` → `lenele2d` → `Liangshan` → … |
+| nothing altered outside the archive | PASS — 13,880 bytes differ in 1.23 GB, **0 outside** the 7,395,328-byte `TABLES.VPP` region |
+
+Living-entity maxima, same route, two discs (`test-doors.iso` = doors remapped, enemies present):
+
+| level | no enemies | control | delta |
+|---|---|---|---|
+| masad | 38 | 58 | −20 |
+| lenele1e | 38 | 58 | −20 |
+| sewer | 12 | 65 | −53 |
+| lenele3d | 5 | 15 | −10 |
+| lenele2d | 11 | 12 | −1 |
+| Liangshan | 17 | 100 | −83 |
+
+Every level is lower with the monsters disarmed, and the control reproduces the vanilla `masad`
+reference (58) exactly. Towns only drop a third — those 38 are townsfolk and party, not monsters,
+which is also why the towns are where the metric is weakest.
+
+**Still not proven:** the route only reached six levels, so ~212 of the 218 remapped doors remain
+unexercised in game; entity counts are a *proxy* for "enemies gone" (the harness does not read
+creature type); and the run needs the test pnach to force door crossings, so it is a harness route
+rather than normal play.
+
 ## 5. Open items
 
 1. **In-game verification of all three** — boot a built ISO headlessly (PINE rig: `watch_state.py`,

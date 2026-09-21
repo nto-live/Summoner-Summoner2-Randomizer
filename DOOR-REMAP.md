@@ -202,6 +202,12 @@ verified (`make_door_test_iso.py`):
 Two discs that differ **only** in the rewritten destination string load two different levels. That
 is the randomizer's headline mechanism, observed inside the running game.
 
+**And it holds when stacked with another feature.** On 2026-09-21 a build combining the full
+218-door remap with the enemy pass was verified the same way: `masad`'s door — `worldmap1` in
+vanilla, rewritten to `lenele1e` — loads **`lenele1e`**, and the chain carries on through `sewer`,
+`lenele3d`, `lenele2d`, `Liangshan`. Changed bytes: 13,880 of 1.23 GB, **0 outside** the archive.
+See `ENEMIES.md` §4 for the entity-count control that goes with it.
+
 ### What this proves, and what it still does not
 
 **Proves:**
