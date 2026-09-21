@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Summoner Randomizer</title>
+<style>
+  :root{
+    --bg:#0c0a12; --bg2:#141020; --panel:#171327; --panel2:#1e1834; --line:#2e2748;
+    --ink:#ece7fb; --dim:#9d92bd; --hot:#ff8a4c; --hot2:#e0563c;
+    --mint:#5fd6a8; --gold:#ffd166; --violet:#a97cff; --rose:#ff6f9c; --sky:#5cc8ff;
+    --ok:#5fd6a8; --warn:#ffd166; --bad:#ff6f6f;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:
+      radial-gradient(1200px 500px at 12% -10%, rgba(169,124,255,.16), transparent 60%),
+      radial-gradient(900px 420px at 88% 0%, rgba(255,138,76,.13), transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1220px;margin:0 auto;padding:0 20px}
+  header{padding:22px 0 14px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:16px}
+  .mascot{width:86px;height:86px;flex:0 0 auto;filter:drop-shadow(0 6px 18px rgba(169,124,255,.35))}
+  h1{margin:0;font-size:clamp(20px,2.6vw,27px);letter-spacing:-.01em}
+  h1 small{display:block;font-size:12px;font-weight:500;letter-spacing:.16em;
+           text-transform:uppercase;color:var(--dim);margin-top:5px}
+  .rings{display:flex;gap:7px;margin-left:auto}
+  .ring{width:18px;height:18px;border-radius:50%;border:3px solid;background:transparent;
+        animation:pop 2.6s ease-in-out infinite}
+  @keyframes pop{0%,100%{transform:scale(1);opacity:.75}50%{transform:scale(1.22);opacity:1}}
+  main{display:grid;grid-template-columns:minmax(340px,430px) 1fr;gap:18px;padding:18px 0 70px}
+  @media(max-width:1000px){main{grid-template-columns:1fr}}
+
+  .card{background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--line);
+        border-radius:16px;padding:17px;margin-bottom:16px}
+  .card h2{margin:0 0 13px;font-size:12px;text-transform:uppercase;letter-spacing:.15em;
+           color:var(--hot);display:flex;align-items:center;gap:8px}
+  .card h2 svg{width:15px;height:15px;flex:0 0 auto}
+
+  label.f{display:block;margin:13px 0 6px;font-size:11.5px;color:var(--dim);
+          text-transform:uppercase;letter-spacing:.1em}
+  select,input[type=text]{width:100%;padding:10px 11px;background:var(--panel2);color:var(--ink);
+      border:1px solid var(--line);border-radius:10px;font:inherit}
+  select:focus,input:focus{outline:2px solid rgba(169,124,255,.5);outline-offset:1px}
+  .row{display:flex;gap:9px}
+  .row > *{flex:1}
+  button{cursor:pointer;font:inherit;border-radius:10px;border:1px solid var(--line);
+      background:var(--panel2);color:var(--ink);padding:11px 13px;transition:.15s}
+  button:hover:not(:disabled){border-color:var(--violet);transform:translateY(-1px)}
+  button:disabled{opacity:.42;cursor:not-allowed}
+  .primary{background:linear-gradient(180deg,var(--hot),var(--hot2));color:#1a0e06;
+      font-weight:800;border:0;box-shadow:0 6px 20px rgba(255,138,76,.25)}
+  .ghost{background:transparent}
+  .mini{padding:8px 10px;font-size:13px}
+
+  /* disc picker */
+  .drop{border:2px dashed var(--line);border-radius:14px;padding:20px;text-align:center;
+        color:var(--dim);transition:.18s;cursor:pointer;background:rgba(255,255,255,.012)}
+  .drop.hot{border-color:var(--violet);color:var(--ink);background:rgba(169,124,255,.09)}
+  .drop b{color:var(--violet)}
+  .badge{display:inline-flex;align-items:center;gap:6px;font:700 10.5px/1 ui-monospace,monospace;
+      letter-spacing:.09em;text-transform:uppercase;padding:6px 10px;border-radius:999px;
+      border:1px solid var(--line);color:var(--dim);background:rgba(255,255,255,.02)}
+  .badge.on{color:var(--ok);border-color:#2c5a46;background:rgba(95,214,168,.08)}
+  .badge.warn{color:var(--warn);border-color:#5a4a1e;background:rgba(255,209,102,.08)}
+  .badge.bad{color:var(--bad);border-color:#5a2c2c;background:rgba(255,111,111,.08)}
+  .discmeta{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}
+  .kv{font-size:12.5px;color:var(--dim);margin-top:9px;line-height:1.75}
+  .kv b{color:var(--ink);font-weight:600}
+  .kv code{font-family:ui-monospace,monospace;font-size:12px;color:var(--violet)}
+  .reason{font-size:12.5px;color:var(--dim);margin-top:10px;padding:10px 11px;border-radius:10px;
+          background:rgba(255,255,255,.025);border-left:3px solid var(--violet)}
+
+  /* modes */
+  .modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .mode{background:var(--panel2);border:1px solid var(--line);border-radius:13px;padding:13px;
+        cursor:pointer;transition:.16s;position:relative;overflow:hidden}
+  .mode:hover{transform:translateY(-2px);border-color:var(--violet)}
+  .mode.sel{border-color:var(--hot);background:linear-gradient(180deg,rgba(255,138,76,.14),transparent)}
+  .mode.sel::after{content:"";position:absolute;inset:0;border-radius:13px;
+        box-shadow:inset 0 0 0 1px rgba(255,138,76,.45)}
+  .mode .ico{width:26px;height:26px;margin-bottom:7px}
+  .mode .nm{font-weight:700;font-size:14px}
+  .mode .bl{font-size:11.5px;color:var(--dim);margin-top:4px;line-height:1.5}
+  .mode .rk{font:700 10px/1 ui-monospace,monospace;letter-spacing:.07em;margin-top:8px;
+            display:inline-block;padding:4px 7px;border-radius:6px;
+            background:rgba(255,255,255,.05);color:var(--dim)}
+  .mode.sel .rk{color:var(--gold)}
+
+  /* transforms */
+  .opt{display:flex;gap:11px;align-items:flex-start;padding:11px;margin:7px 0;
+       background:var(--panel2);border:1px solid var(--line);border-radius:11px;transition:.15s}
+  .opt:hover{border-color:var(--violet)}
+  .opt input{margin-top:4px;accent-color:var(--hot);width:15px;height:15px}
+  .opt .t{font-size:13.5px;font-weight:600}
+  .opt .d{font-size:11.5px;color:var(--dim);margin-top:3px;line-height:1.5}
+  .pend{opacity:.7}
+  .pend .t{color:var(--warn)}
+
+  /* log + output */
+  pre{background:#08060e;border:1px solid var(--line);border-radius:12px;padding:13px;
+      max-height:300px;overflow:auto;font:12px/1.62 ui-monospace,SFMono-Regular,Menlo,monospace;
+      color:#cfc6ea;margin:0;white-space:pre-wrap}
+  .build{display:flex;gap:11px;align-items:center;padding:11px;border:1px solid var(--line);
+         border-radius:11px;margin-bottom:8px;background:var(--panel2)}
+  .build .bi{width:22px;height:22px;flex:0 0 auto}
+  .build .bn{font:600 12.5px/1.4 ui-monospace,monospace;word-break:break-all}
+  .build .bm{font-size:11.5px;color:var(--dim);margin-top:3px}
+  .build .bs{margin-left:auto;text-align:right;font-size:11px;color:var(--dim);white-space:nowrap}
+  .prog{height:7px;border-radius:6px;background:var(--panel2);overflow:hidden;margin-top:12px;display:none}
+  .prog i{display:block;height:100%;width:34%;
+      background:linear-gradient(90deg,var(--violet),var(--hot),var(--gold));
+      animation:slide 1.15s linear infinite}
+  @keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(320%)}}
+  .stat{font-size:12.5px;margin-top:12px;line-height:1.85}
+  .stat b{color:var(--ok)}
+  .stat .bad{color:var(--bad)}
+  a{color:var(--violet)}
+  .spin{animation:spin 3.4s linear infinite;transform-origin:center}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .float{animation:float 3.6s ease-in-out infinite}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+  .hint{font-size:11.5px;color:var(--dim);margin-top:9px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <!-- cute summoner ghost mascot, inline so nothing external is needed -->
+    <svg class="mascot float" viewBox="0 0 100 100" aria-label="Summoner ghost">
+      <defs>
+        <linearGradient id="gbody" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#f3ecff"/><stop offset="1" stop-color="#c3b3ee"/>
+        </linearGradient>
+        <radialGradient id="gglow"><stop offset="0" stop-color="#ffd166" stop-opacity=".85"/>
+          <stop offset="1" stop-color="#ffd166" stop-opacity="0"/></radialGradient>
+      </defs>
+      <!-- summoned ring behind -->
+      <circle class="spin" cx="50" cy="46" r="33" fill="none" stroke="url(#gglow)" stroke-width="7"/>
+      <circle class="spin" cx="50" cy="46" r="33" fill="none" stroke="#ffd166" stroke-width="2.4"
+              stroke-dasharray="7 9" opacity=".85"/>
+      <!-- ghost body -->
+      <path d="M50 20c-15 0-26 11-26 25v27c0 3 3 4 5 2l5-4 5 4c1.6 1.3 3.4 1.3 5 0l5-4 5 4c1.6 1.3 3.4 1.3 5 0l5-4 5 4c2 2 5 1 5-2V45c0-14-11-25-25-25z"
+            fill="url(#gbody)" stroke="#241c3a" stroke-width="2.2" stroke-linejoin="round"/>
+      <!-- eyes -->
+      <ellipse cx="41" cy="44" rx="4.6" ry="5.6" fill="#241c3a"/>
+      <ellipse cx="59" cy="44" rx="4.6" ry="5.6" fill="#241c3a"/>
+      <circle cx="42.6" cy="42" r="1.7" fill="#fff"/><circle cx="60.6" cy="42" r="1.7" fill="#fff"/>
+      <!-- blush -->
+      <ellipse cx="33.5" cy="52" rx="4" ry="2.6" fill="#ff8fb3" opacity=".65"/>
+      <ellipse cx="66.5" cy="52" rx="4" ry="2.6" fill="#ff8fb3" opacity=".65"/>
+      <!-- tiny smile -->
+      <path d="M46 53q4 3.4 8 0" fill="none" stroke="#241c3a" stroke-width="1.9" stroke-linecap="round"/>
+      <!-- little hood -->
+      <path d="M28 40c2-14 12-21 22-21s20 7 22 21c-6-7-14-10-22-10s-16 3-22 10z"
+            fill="#ff8a4c" opacity=".92"/>
+    </svg>
+    <h1>Summoner Randomizer<small>bring your own disc &nbsp;·&nbsp; iso in, randomized iso out</small></h1>
+    <div class="rings" aria-hidden="true">
+      <span class="ring" style="border-color:#ffd166"></span>
+      <span class="ring" style="border-color:#5cc8ff;animation-delay:.25s"></span>
+      <span class="ring" style="border-color:#5fd6a8;animation-delay:.5s"></span>
+      <span class="ring" style="border-color:#ff6f9c;animation-delay:.75s"></span>
+      <span class="ring" style="border-color:#a97cff;animation-delay:1s"></span>
+      <span class="ring" style="border-color:#ff8a4c;animation-delay:1.25s"></span>
+      <span class="ring" style="border-color:#9be15d;animation-delay:1.5s"></span>
+      <span class="ring" style="border-color:#e0e0ff;animation-delay:1.75s"></span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ============ LEFT : input ============ -->
+  <div>
+    <div class="card">
+      <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>Your disc</h2>
+      <select id="iso"></select>
+      <div class="discmeta" id="discmeta"></div>
+      <div class="reason" id="discReason">pick a disc to inspect it</div>
+
+      <div class="drop" id="drop" style="margin-top:13px">
+        <div style="font-size:13px">drop an <b>.iso</b> here to add it</div>
+        <div class="hint">or click to choose &nbsp;·&nbsp; up to a few GB, streamed straight to <code>work/in</code></div>
+        <input type="file" id="file" accept=".iso" hidden>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="addPath" placeholder="…or paste a full path to a .iso">
+        <button class="mini ghost" id="addBtn" style="flex:0 0 auto">Add</button>
+      </div>
+      <div class="hint" id="addMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Mode</h2>
+      <div class="modes" id="modes"></div>
+      <label class="f">Seed</label>
+      <div class="row">
+        <input type="text" id="seed" value="SUMMONER">
+        <button class="mini ghost" id="roll" style="flex:0 0 auto" title="random seed">🎲</button>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="dry">Dry run</button>
+        <button class="primary" id="go">Build ISO</button>
+      </div>
+      <div class="prog" id="prog"><i></i></div>
+      <div class="stat" id="stat"></div>
+    </div>
+
+    <div class="card" id="optsCard" style="display:none">
+      <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Tune</h2>
+      <div id="opts"></div>
+      <div class="hint">Options apply to the transforms you have selected.</div>
+    </div>
+
+    <div class="card">
+      <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 8l7-5 7 5"/></svg>What gets randomized</h2>
+      <div class="row" style="margin-bottom:9px">
+        <button class="mini ghost" id="allOn">All on</button>
+        <button class="mini ghost" id="allOff">All off</button>
+        <button class="mini ghost" id="invert">Invert</button>
+      </div>
+      <div id="count" class="hint" style="margin:0 0 9px"></div>
+      <div id="avail"></div>
+    </div>
+  </div>
+
+  <!-- ============ RIGHT : output ============ -->
+  <div>
+    <div class="card">
+      <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16v12H4z"/><path d="M8 10h8"/></svg>Log</h2>
+      <pre id="log">idle — pick a disc and a mode</pre>
+    </div>
+
+    <div class="card">
+      <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>Builds</h2>
+      <div id="outs"><div class="hint">nothing built yet</div></div>
+    </div>
+
+    <div class="card">
+      <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>Not available yet</h2>
+      <div id="pend"></div>
+      <div class="hint">These need an undecoded file format before they can be built.</div>
+    </div>
+  </div>
+</main>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const j = async (u, o) => { const r = await fetch(u, o); return r.json(); };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const mb = n => (n/1048576).toFixed(0) + " MB";
+
+let MODES = {}, INFO = {}, OPTSCHEMA = {}, OPTVALS = {}, SEL_MODE = "doors", SEL_TX = new Set(), ISOS = [], POLL = null;
+
+const MODE_ICON = {
+  vanilla:'<path d="M12 3v18M3 12h18"/>',
+  doors:'<path d="M5 3h11v18H5z"/><circle cx="13" cy="12" r="1.4"/>',
+  chaos:'<circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/><circle cx="12" cy="15" r="1.3"/>',
+  short:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  one_hour:'<circle cx="12" cy="12" r="8"/><path d="M12 7v5l4 2"/><path d="M12 2v2"/>',
+  everything:'<path d="M12 3l2.2 5.3L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.8-.7z"/>',
+  progression:'<path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/>',
+  hardcore:'<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9.5 12l2 2 3.5-4"/>',
+  roguelike:'<path d="M6 4h4v4H6zM14 4h4v4h-4zM6 16h4v4H6zM14 16h4v4h-4z"/><path d="M10 6h4M10 18h4M6 10v4M18 10v4"/>',
+  roguelike_short:'<path d="M6 4h4v4H6zM14 4h4v4h-4zM6 16h4v4H6zM14 16h4v4h-4z"/><path d="M10 6h4"/>',
+};
+
+function renderModes(){
+  const box = $('#modes'); box.innerHTML = "";
+  for (const [k,v] of Object.entries(MODES)){
+    const d = document.createElement("div");
+    d.className = "mode" + (k === SEL_MODE ? " sel" : "");
+    d.innerHTML = `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="1.9" stroke-linecap="round">${MODE_ICON[k] || MODE_ICON.vanilla}</svg>
+      <div class="nm">${esc(v.label)}</div>
+      <div class="bl">${esc(v.blurb)}</div>
+      <div class="rk">${esc(v.risk)}</div>`;
+    d.dataset.mode = k;
+    d.onclick = () => {
+      SEL_MODE = k;
+      SEL_TX = new Set(v.transforms);
+      // seed the dials from the mode's presets so a chosen mode carries its
+      // values even before anything is touched
+      OPTVALS = JSON.parse(JSON.stringify(v.options || {}));
+      renderModes(); renderAvail(); renderOptions();
+    };
+    box.appendChild(d);
+  }
+}
+
+function markModified(){
+  // keep the chosen mode visible, but flag it when the set has been hand-edited
+  const base = SEL_MODE !== "custom" ? new Set((MODES[SEL_MODE]?.transforms)||[]) : null;
+  const sel = new Set(SEL_TX);
+  const modified = base ? (base.size !== sel.size || [...base].some(t=>!sel.has(t))) : false;
+  [...document.querySelectorAll(".mode")].forEach(c => c.classList.toggle("sel", c.dataset.mode === SEL_MODE));
+  const label = SEL_MODE === "custom" ? "custom" : (MODES[SEL_MODE]?.label || SEL_MODE);
+  $("#count").innerHTML = `<b>${sel.size}</b> of ${Object.keys(INFO).length} features on`
+    + ` · based on <b>${esc(label)}</b>`
+    + ((SEL_MODE === "custom" || modified) ? ' <span class="badge warn">modified</span>' : "");
+}
+
+function renderAvail(){
+  const box = $("#avail"); box.innerHTML = "";
+  const keys = Object.keys(INFO);
+  if (!keys.length){ box.innerHTML = '<div class="hint">loading…</div>'; return; }
+  // anything that changes progression or pacing is flagged, so it is never flipped by accident
+  const gameplay = new Set(["ring_hunt", "levelcap_raise", "xp_boost", "cutscene_bypass",
+                            "xp_scale", "levelcap_set", "permadeath", "xp_nerf"]);
+  for (const k of keys){
+    const [t, desc] = INFO[k];
+    const on = SEL_TX.has(k);
+    const el = document.createElement("label");
+    el.className = "opt";
+    el.innerHTML = `<input type="checkbox" ${on?"checked":""}>
+      <span><span class="t">${esc(t)}${gameplay.has(k)?' <span class="badge warn">gameplay</span>':''}</span>
+      <div class="d">${esc(desc)}</div></span>`;
+    el.querySelector("input").onchange = e => {
+      e.target.checked ? SEL_TX.add(k) : SEL_TX.delete(k);
+      markModified(); renderOptions();
+    };
+    box.appendChild(el);
+  }
+  markModified();
+}
+
+// ---- per-transform options ------------------------------------------------
+function activeOptionTransforms(){
+  const on = new Set(SEL_TX);
+  if (SEL_MODE !== "custom" && MODES[SEL_MODE]) (MODES[SEL_MODE].transforms||[]).forEach(t=>on.add(t));
+  return Object.keys(OPTSCHEMA).filter(t => on.has(t));
+}
+
+function renderOptions(){
+  const box = $("#opts"), card = $("#optsCard");
+  const owners = activeOptionTransforms();
+  if (!owners.length){ card.style.display = "none"; box.innerHTML = ""; return; }
+  card.style.display = "";
+  box.innerHTML = "";
+  for (const t of owners){
+    const h = document.createElement("div");
+    h.className = "hint";
+    h.style.marginTop = "2px";
+    h.textContent = (INFO[t]?.[0]) || t;
+    box.appendChild(h);
+    for (const [k, f] of Object.entries(OPTSCHEMA[t] || {})){
+      const val = (OPTVALS[t] || {})[k] ?? f.default;
+      const lab = document.createElement("label");
+      lab.className = "f";
+      lab.textContent = f.label || k;
+      box.appendChild(lab);
+      let input;
+      if (f.type === "choice"){
+        input = document.createElement("select");
+        input.innerHTML = (f.choices||[]).map(c =>
+          `<option value="${c ?? ""}"${(c ?? "") === (val ?? "") ? " selected" : ""}>${c ?? "seeded random"}</option>`).join("");
+      } else if (f.type === "bool"){
+        input = document.createElement("select");
+        input.innerHTML = `<option value="1"${val ? " selected":""}>yes</option><option value="0"${!val ? " selected":""}>no</option>`;
+      } else {
+        input = document.createElement("input");
+        input.type = "number";
+        if (f.min != null) input.min = f.min;
+        if (f.max != null) input.max = f.max;
+        input.value = val ?? "";
+      }
+      input.onchange = () => {
+        const raw = input.value;
+        let v = raw;
+        if (f.type === "bool") v = raw === "1";
+        else if (f.type === "int") v = raw === "" ? null : parseInt(raw, 10);
+        else if (raw === "") v = null;
+        OPTVALS[t] = OPTVALS[t] || {};
+        OPTVALS[t][k] = v;
+      };
+      box.appendChild(input);
+      if (f.help){ const p = document.createElement("div"); p.className="hint"; p.textContent = f.help; box.appendChild(p); }
+    }
+  }
+}
+
+function renderPend(pend){
+  const box = $("#pend"); box.innerHTML = "";
+  for (const [k,v] of Object.entries(pend)){
+    const el = document.createElement("div");
+    el.className = "opt pend";
+    el.innerHTML = `<span><span class="t">${esc(k.replace(/_/g," "))}
+        <span class="badge warn">needs ${esc(v.blocked_by)}</span></span>
+      <div class="d">${esc(v.reason)}</div></span>`;
+    box.appendChild(el);
+  }
+}
+
+function renderDisc(){
+  const opt = $("#iso").selectedOptions[0];
+  if (!opt){ $("#discmeta").innerHTML=""; $("#discReason").textContent="none found"; return; }
+  const d = ISOS.find(x => x.path === opt.value) || {};
+  const ver = (d.vpp_versions||[]).join(", ") || "—";
+  $("#discmeta").innerHTML =
+    (d.supported ? '<span class="badge on">✓ supported</span>' : '<span class="badge bad">✗ unsupported</span>')
+    + `<span class="badge">${esc(d.game||"unknown")}</span>`
+    + `<span class="badge">VPP v${esc(ver)}</span>`
+    + `<span class="badge">${(d.vpp_count??0)} archives</span>`
+    + `<span class="badge">${mb(d.bytes||0)}</span>`;
+  $("#discReason").innerHTML = `<b>${esc(d.name||"")}</b> — ${esc(d.reason||"")}`
+    + (d.boot_elf ? `<br>boot: <code>${esc(d.boot_elf)}</code>` : "")
+    + (d.volume_id ? `&nbsp; volume: <code>${esc(d.volume_id)}</code>` : "");
+  const ok = !!d.supported;
+  $("#go").disabled = !ok; $("#dry").disabled = !ok;
+}
+
+function renderOut(files){
+  const box = $("#outs");
+  if (!files?.length){ box.innerHTML = '<div class="hint">nothing built yet</div>'; return; }
+  box.innerHTML = files.map(f => {
+    const icon = f.supported === false
+      ? '<svg class="bi" viewBox="0 0 24 24" fill="none" stroke="#ff6f6f" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 8l8 8M16 8l-8 8"/></svg>'
+      : '<svg class="bi" viewBox="0 0 24 24" fill="none" stroke="#5fd6a8" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16 9.5"/></svg>';
+    const meta = [f.mode && `mode ${f.mode}`, f.seed && `seed ${f.seed}`,
+                  f.edits != null && `${f.edits.toLocaleString()} edits`,
+                  mb(f.bytes)].filter(Boolean).join(" · ");
+    const sha = f.sha256 ? `<div class="bm">sha256 ${esc(f.sha256.slice(0,20))}…</div>` : "";
+    return `<div class="build">${icon}
+      <div><div class="bn">${esc(f.name)}</div><div class="bm">${esc(meta)}</div>${sha}</div>
+      <div class="bs">${f.tracked ? (f.size_preserved ? "size ok" : "size changed") : ""}
+        <br>${new Date((f.built||0)*1000).toLocaleString()}</div></div>`;
+  }).join("");
+}
+
+async function refreshOut(){ const r = await j("/api/out"); renderOut(r.files); }
+async function refreshIsos(){
+  const r = await j("/api/isos");
+  ISOS = r.isos || [];
+  const sel = $("#iso");
+  const keep = sel.value;
+  sel.innerHTML = ISOS.map(d => `<option value="${esc(d.path)}">${esc(d.game)} — ${esc(d.name)} (${mb(d.bytes)})</option>`).join("")
+    || '<option value="">no discs found</option>';
+  if (keep && ISOS.some(d => d.path === keep)) sel.value = keep;
+  renderDisc();
+}
+
+async function tick(){
+  const s = await j("/api/status");
+  $("#log").textContent = (s.log||[]).join("\n") || "idle";
+  const running = s.running || s.dry?.running;
+  $("#prog").style.display = running ? "block" : "none";
+  $("#go").disabled = running || !curDiscOk();
+  $("#dry").disabled = running || !curDiscOk();
+  if (!running){
+    if (s.error) $("#stat").innerHTML = `<span class="bad">failed: ${esc(s.error)}</span>`;
+    if (s.result){
+      const r = s.result;
+      const edits = (r.reports||[]).reduce((a,b)=>a+(b.changed||0),0);
+      $("#stat").innerHTML = `<b>built</b> ${esc(r.name||"")}<br>${edits.toLocaleString()} edits ·
+        size preserved: <b>${r.size_preserved}</b>`;
+      refreshOut();
+    }
+    if (s.dry?.result){
+      const d = s.dry.result;
+      $("#stat").innerHTML = `<b>dry run</b> · ${d.edit_total.toLocaleString()} edits ·
+        ${d.changed_bytes_total.toLocaleString()} blob bytes would change<br>
+        <span style="color:var(--dim)">nothing was written</span>`;
+    }
+    if (POLL){ clearInterval(POLL); POLL = null; }
+  }
+}
+
+function curDiscOk(){
+  const opt = $("#iso").selectedOptions[0];
+  const d = opt && ISOS.find(x=>x.path===opt.value);
+  return !!(d && d.supported);
+}
+
+function startPoll(){ if (POLL) clearInterval(POLL); POLL = setInterval(tick, 800); tick(); }
+
+async function submit(kind){
+  const path = $("#iso").value;
+  const seedVal = $("#seed").value || "SEED1";
+  if (!path){ alert("no disc selected"); return; }
+  if (!SEL_TX.size){ alert("turn on at least one feature — nothing is selected to randomize"); return; }
+  // express the selection exactly: keep the mode name for a pure preset, otherwise
+  // send explicit include/exclude deltas so the build name still says which mode it came from
+  const sel = new Set(SEL_TX);
+  const base = SEL_MODE !== "custom" ? new Set((MODES[SEL_MODE]?.transforms)||[]) : null;
+  let body;
+  if (!base || SEL_MODE === "custom"){
+    body = { iso: path, seed: seedVal, mode: "custom", transforms: [...sel] };
+  } else {
+    const drop = [...base].filter(t => !sel.has(t));
+    const add = [...sel].filter(t => !base.has(t));
+    body = { iso: path, seed: seedVal, mode: SEL_MODE };
+    if (drop.length) body.exclude = drop;
+    if (add.length) body.include = add;
+  }
+  const opts = {};
+  for (const t of Object.keys(OPTVALS)){
+    const on = SEL_TX.has(t) || (SEL_MODE !== "custom" && (MODES[SEL_MODE]?.transforms||[]).includes(t));
+    if (!on) continue;
+    const clean = {};
+    for (const [k,v] of Object.entries(OPTVALS[t] || {})) if (v !== null && v !== "") clean[k] = v;
+    if (Object.keys(clean).length) opts[t] = clean;
+  }
+  if (Object.keys(opts).length) body.options = opts;
+  $("#stat").textContent = "";
+  const r = await j(kind === "dry" ? "/api/dryrun" : "/api/randomize",
+                    {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+  if (r.error){ $("#stat").innerHTML = `<span class="bad">${esc(r.error)}</span>`; return; }
+  startPoll();
+}
+
+$("#allOn").onclick = () => { SEL_TX = new Set(Object.keys(INFO)); SEL_MODE = "custom"; renderModes(); renderAvail(); renderOptions(); };
+$("#allOff").onclick = () => { SEL_TX = new Set(); SEL_MODE = "custom"; renderModes(); renderAvail(); renderOptions(); };
+$("#invert").onclick = () => {
+  SEL_TX = new Set(Object.keys(INFO).filter(k => !SEL_TX.has(k)));
+  SEL_MODE = "custom"; renderModes(); renderAvail(); renderOptions();
+};
+
+$("#go").onclick = () => submit("build");
+$("#dry").onclick = () => submit("dry");
+$("#iso").onchange = renderDisc;
+$("#roll").onclick = () => {
+  const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  $("#seed").value = Array.from({length:6}, () => a[Math.floor(Math.random()*a.length)]).join("");
+};
+$("#addBtn").onclick = async () => {
+  const p = $("#addPath").value.trim();
+  if (!p) return;
+  const r = await j("/api/add-disc", {method:"POST", headers:{"Content-Type":"application/json"},
+                                      body: JSON.stringify({path:p})});
+  $("#addMsg").textContent = r.error ? "✗ " + r.error : "✓ added " + (r.disc?.name || p);
+  $("#addPath").value = "";
+  refreshIsos();
+};
+
+// drag + drop / click to upload
+const drop = $("#drop"), file = $("#file");
+drop.onclick = () => file.click();
+["dragenter","dragover"].forEach(e => drop.addEventListener(e, ev => {
+  ev.preventDefault(); drop.classList.add("hot"); }));
+["dragleave","drop"].forEach(e => drop.addEventListener(e, ev => {
+  ev.preventDefault(); drop.classList.remove("hot"); }));
+drop.addEventListener("drop", ev => { if (ev.dataTransfer.files[0]) upload(ev.dataTransfer.files[0]); });
+file.onchange = () => { if (file.files[0]) upload(file.files[0]); };
+
+function upload(f){
+  if (!f.name.toLowerCase().endsWith(".iso")){ $("#addMsg").textContent = "✗ only .iso files"; return; }
+  $("#addMsg").textContent = `uploading ${f.name} (${mb(f.size)})…`;
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/api/upload?name=" + encodeURIComponent(f.name));
+  xhr.upload.onprogress = e => {
+    if (e.lengthComputable) $("#addMsg").textContent =
+      `uploading ${f.name} — ${Math.round(e.loaded/e.total*100)}%`;
+  };
+  xhr.onload = () => {
+    let r = {}; try { r = JSON.parse(xhr.responseText); } catch(_){}
+    $("#addMsg").textContent = r.error ? "✗ " + r.error
+      : `✓ ${r.name} — ${r.disc?.game || "?"} (${r.disc?.supported ? "supported" : "unsupported"})`;
+    refreshIsos();
+  };
+  xhr.onerror = () => { $("#addMsg").textContent = "✗ upload failed"; };
+  xhr.send(f);
+}
+
+(async () => {
+  const t = await j("/api/transforms");
+  MODES = t.modes || {}; INFO = t.info || {}; OPTSCHEMA = t.options || {};
+  renderModes(); renderAvail(); renderPend(t.pending || {}); renderOptions();
+  SEL_TX = new Set((MODES[SEL_MODE]||{}).transforms || []);
+  renderAvail();
+  await refreshIsos();
+  await refreshOut();
+  tick();
+})();
+</script>
+</body>
+</html>

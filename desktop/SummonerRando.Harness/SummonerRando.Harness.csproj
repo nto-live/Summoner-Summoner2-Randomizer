@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SummonerRando.Engine\SummonerRando.Engine.csproj" />
+    <!-- The harness drives the real window headlessly (screenshot and dump-ui
+         modes), so it links against the desktop UI project. -->
+    <ProjectReference Include="..\SummonerRando.Desktop\SummonerRando.Desktop.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- net8.0-windows + WinForms so the harness can build and render MainForm
+         in-process, with no display and no Application.Run. -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

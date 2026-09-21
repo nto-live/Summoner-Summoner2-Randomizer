@@ -1,0 +1,124 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+
+namespace SummonerRando.Engine;
+
+/// <summary>
+/// Finds a PlayStation 2 emulator to play the ISO this app writes.
+///
+/// The app deliberately does not ship one: PCSX2 is third-party software, it needs a BIOS the
+/// user must supply, and the whole point of this tool is that the user brings their own disc.
+/// What the app can do is find an installed emulator, remember one the user points it at, and
+/// hand the finished ISO straight to it - and say plainly what is missing when there is none.
+/// </summary>
+public static class EmulatorLocator
+{
+    /// <summary>Marker file next to the app holding a user-chosen emulator path.</summary>
+    public const string MarkerFileName = "emulator.txt";
+
+    public static readonly string[] CommonRelativePaths =
+    {
+        @"PCSX2\pcsx2-qt.exe",
+        @"PCSX2\pcsx2.exe",
+        @"Programs\PCSX2\pcsx2-qt.exe",
+    };
+
+    /// <summary>Exe file names we accept when the user picks one by hand.</summary>
+    public static readonly string[] KnownExeNames = { "pcsx2-qt.exe", "pcsx2.exe" };
+
+    /// <summary>The saved choice, if it still exists.</summary>
+    public static string? Saved()
+    {
+        try
+        {
+            var marker = Path.Combine(AppContext.BaseDirectory, MarkerFileName);
+            if (!File.Exists(marker))
+                return null;
+            var text = File.ReadAllText(marker).Trim();
+            return text.Length > 0 && File.Exists(text) ? text : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static void Save(string path)
+    {
+        try
+        {
+            File.WriteAllText(Path.Combine(AppContext.BaseDirectory, MarkerFileName), path);
+        }
+        catch
+        {
+            // remembering the path is a convenience, never a hard failure
+        }
+    }
+
+    /// <summary>Saved path first, then the usual install locations.</summary>
+    public static string? Find()
+    {
+        var saved = Saved();
+        if (saved is not null)
+            return saved;
+
+        foreach (var dir in CandidateRoots())
+        {
+            foreach (var rel in CommonRelativePaths)
+            {
+                try
+                {
+                    var full = Path.Combine(dir, rel);
+                    if (File.Exists(full))
+                        return full;
+                }
+                catch
+                {
+                    // malformed root; keep looking
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> CandidateRoots()
+    {
+        yield return Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        yield return Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+        yield return Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrEmpty(userProfile))
+        {
+            yield return Path.Combine(userProfile, "Downloads");
+            yield return Path.Combine(userProfile, "Desktop");
+        }
+    }
+
+    /// <summary>Launch the emulator with a disc image. Returns null on success, else the error.</summary>
+    public static string? Play(string emulatorPath, string isoPath)
+    {
+        if (!File.Exists(emulatorPath))
+            return "The emulator is not at " + emulatorPath + " any more.";
+        if (!File.Exists(isoPath))
+            return "There is no ISO at " + isoPath + " yet.";
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = emulatorPath,
+                WorkingDirectory = Path.GetDirectoryName(emulatorPath) ?? AppContext.BaseDirectory,
+                UseShellExecute = false,
+            };
+            psi.ArgumentList.Add(isoPath);
+            Process.Start(psi);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+}

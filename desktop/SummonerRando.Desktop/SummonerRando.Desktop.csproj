@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SummonerRando.Engine\SummonerRando.Engine.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SummonerRando</AssemblyName>
+    <RootNamespace>SummonerRando.Desktop</RootNamespace>
+    <ApplicationTitle>Summoner Randomizer</ApplicationTitle>
+  </PropertyGroup>
+
+</Project>

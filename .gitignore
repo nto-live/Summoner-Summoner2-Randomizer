@@ -216,3 +216,34 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Summoner Randomizer: build + test artefacts, kept out of the repo -----------
+# Nothing here is source. It is either generated (builds, caches) or somebody else's
+# work (emulator, toolchains) or a disc image, none of which belongs in the repo.
+work/
+desktop/publish/
+desktop/publish-portable/
+desktop/**/bin/
+desktop/**/obj/
+*.iso
+*.exe
+*.dll
+*.pdb
+*.pyc
+scan-cache.json
+*.log
+state.json*
+
+# evidence logs are small and deliberately kept
+!docs/evidence/*.log
+!docs/evidence/*.json
+
+# dev scratch renders and user-specific project files
+desktop/_ui/*.png
+desktop/_capture.png
+*.csproj.user
+
+
+# dev scratch: UI-tree dumps and layout renders from building the app
+desktop/_ui/
+

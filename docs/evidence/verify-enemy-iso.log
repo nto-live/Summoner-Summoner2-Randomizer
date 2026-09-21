@@ -1,0 +1,17 @@
+# Summoner Randomizer engine log
+# engine: summoner randomizer cli
+# argv: cli.py --verify F:\rando\S1\out\Summoner-noenemies-ENEMY1.iso --against F:\rando\S1\iso\Summoner.iso -v --log F:\rando\S1\out\devlog-verify.log --report F:\rando\S1\out\verify-report.json
+# cwd: C:\Users\NtO\.openclaw\workspace\tools\summoner-rando
+# python: 3.13.13 (CPython)
+# platform: Windows-11-10.0.26200-SP0
+# transforms: 37  modes: 29
+# verbose: 1
+#progress [    8.602s] ok   SYSTEM.CNF names a boot elf - BOOT2 = cdrom0:\SLUS_200.74;1
+#progress [    8.603s] ok   boot elf is present in the image - cdrom0:\SLUS_200.74;1
+#progress [    8.603s] ok   disc is a supported Summoner image - No known volume ID, but the archive layout matches Summoner 1 (VPP v1, 527 table entries). Treating as supported.
+#progress [    8.604s] ok   script archive found - 0x49086800, 527 entries
+#progress [    8.604s] ok   every archive lies inside the image - 9 archives
+#progress [    8.604s] ok   same byte length as the source - 1232699392 bytes
+#progress [  183.951s] ok   changes confined to TABLES.VPP - 12201 bytes differ, 0 outside the archive
+# result {"path": "F:\\rando\\S1\\out\\Summoner-noenemies-ENEMY1.iso", "bytes": 1232699392, "sha256": "D65C80C28F25B49760840BA9550778C0CED9B4637A710957667E46B4EFCE2932", "volume_id": "", "boot_elf": "cdrom0:\\SLUS_200.74;1", "game": "Summoner", "supported": true, "archives": 9, "vpp_version": 1, "tables": {"offset": "0x49086800", "bytes": 7395328, "entries": 527}, "checks": [{"check": "SYSTEM.CNF names a boot elf", "ok": true, "detail": "BOOT2 = cdrom0:\\SLUS_200.74;1"}, {"check": "boot elf is present in the image", "ok": true, "detail": "cdrom0:\\SLUS_200.74;1"}, {"check": "disc is a supported Summoner image", "ok": true, "detail": "No known volume ID, but the archive layout matches Summoner 1 (VPP v1, 527 table entries). Treating as supported."}, {"check": "script archive found", "ok": true, "detail": "0x49086800, 527 entries"}, {"check": "every archive lies inside the image", "ok": true, "detail": "9 archives"}, {"check": "same byte length as the source", "ok": true, "detail": "1232699392 bytes"}, {"check": "changes confined to TABLES.VPP", "ok": true, "detail": "12201 bytes differ, 0 outside the archive"}], "diff": {"bytes_differ": 12201, "first_offset": 1225393601, "last_offset": 1229227232, "outside_tables": 0, "region": {"offset": 1225287680, "bytes": 7395328}}, "ok": true}
+# exit 0
