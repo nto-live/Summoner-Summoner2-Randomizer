@@ -233,11 +233,52 @@ See `ENEMIES.md` §4 for the entity-count control that goes with it.
    route exists.
 4. `masad`'s own door is a **scripted** one (`flags & 2`): it runs `level_script_do_clicked`
    instead of loading directly. Whether an arbitrary remap lands on a scripted or a plain door is
-   a per-door property the mapper must respect.
+   a per-door property the mapper must respect. — **sharpened 2026-09-22: that bit is *runtime*
+   state, not a stored property of the record. See §4.5b; the warning stands, the mechanism was
+   wrong.**
+
+### 4.5b The engine's own disc, and what `flags` really is — 2026-09-22
+
+§4.5 proved the mechanism with a **lab** disc (`make_door_test_iso.py`, absolute ISO offsets). The
+feature now lives in the engine, so the A/B was repeated on a disc that came out of `cli.py`:
+`F:\rando\S1\out\Summoner-doorremap-DOOR1.iso`, seed `DOOR1`, sha256 `0FEDE7A7…0807`, 200
+ destinations rewritten, size preserved, 0 bytes changed outside the declared name fields.
+
+Same door, same harness pnach, one disc difference — the level name read off the live game:
+
+| Disc | masad's door record says | live `rec0` flags | what the game loaded |
+|---|---|---|---|
+| `Summoner.iso` (vanilla) | `worldmap1` | 3 | `worldmap1` (script `worldmap1`, start id 2) — needed the run-script bit cleared by hand |
+| `Summoner-doorremap-DOOR1.iso` (engine) | `lenele1c` | **1** | **`lenele1c`** (script `lenele1c`, start id 2) — **fired unaided** |
+
+Observed chain on the engine disc: `masad → lenele1c → lenele1aa → eleh`. The disc was confirmed
+**running**, not merely booted (churn 18 of 124 256 KB blocks; CRC `13E2774E`). **Gates forced** —
+`crossing_test` / `inside_mesh` return 1 and the load-arm test is nop'd. No honest walk yet.
+
+**And point 4 above was not just incomplete — it misdiagnosed the cause.** `flags` is not carried
+by the door record: `FUN_00200FE8` writes `1` into `rec+0x54` for every `$Trigger:` it parses (bit
+1 clear ⇒ "level change"), and the scripted/plain distinction is decided later, at runtime.
+Checked at the file level on 2026-09-22 (`work\_door_bytes_check.py`): the masad door's whole
+104-byte record window was compared on both discs and **only the 10 name-field bytes differ — every
+other field byte-identical, `0x54` included**. A byte the game overwrites itself cannot be the thing
+a patch flipped.
+
+> **Scripted-ness is a property of the *name*, resolved at load — not of the door record.** The
+> remap therefore changes it implicitly: `worldmap1` matched a same-named click script in `masad`
+> and ran it, `lenele1c` does not, so the door became a plain level change. That is the behaviour a
+> remapper wants, but it means the reachability guard must be written against *the destination
+> name's* script resolution — not against a flags byte that never exists in the file.
+
+Also worth saying plainly: this run exercises **one** door of 218. The other 217 are unverified, and
+so is a crossing a player could actually walk.
 
 ### How to reproduce
 
 ```powershell
+# 0. the engine's own remap, built from the clean retail disc (add -q under PowerShell!)
+python cli.py --build "F:\rando\S1\iso\Summoner.iso" --transforms door_destination_remap \
+       --seed DOOR1 --out "F:\rando\S1\out\Summoner-doorremap-DOOR1.iso" -q --report out.json
+
 # 1. build a one-door test disc (source disc is never opened for write)
 python F:\rando\S1\notes\make_door_test_iso.py catacombs Masad
 

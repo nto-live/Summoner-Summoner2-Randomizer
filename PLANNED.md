@@ -187,6 +187,25 @@ The in-game door proof currently *forces* the two geometry gates (`crossing_test
 `inside_mesh`) and nops the load-arm test. Satisfy the crossing for real: read
 `FUN_0017e4d8` / `FUN_0017ee40` / `FUN_0017e548`, drive the player with PINE writes, then drop the
 harness patches and re-run the A/B.
+**Note 2026-09-22 (from the flag investigation, `DOOR-REMAP.md` §4.5b):** whether a door is
+scripted or a plain level change is **runtime** state — `FUN_00200FE8` writes `1` into `rec+0x54`
+for every `$Trigger:` it parses, so the distinction is decided later, when the destination *name*'
+sclick script resolves. The file record never carries it. So the reachability guard must be written
+against the destination name's script resolution, and must not assume a flags byte it cannot read
+out of the disc.
+
+### 2.14 Wider door coverage — 217 of the 218 doors have never been watched
+The 2026-09-22 engine-disc A/B (`DOOR-REMAP.md` §4.5b) exercised exactly **one** door, on exactly
+one seed. Both discs (vanilla, engine-remapped) and both entity comparisons were built on that one
+crossing. The remap itself is proven; the *sample* is one. Widen it: pick N doors across different
+source levels, run each through the same harness, and record the level each one loads. Also worth
+watching: a door whose remap lands on a destination with **no** same-named script (expected: plain
+level change) versus one that does (expected: scripted).
+
+### 2.15 Creature-type readout
+The entity-count comparison is a proxy — it counts *living entities*, not monsters. Reading the
+creature type/team for each entity would turn "fewer things are drawn" into "these specific
+monsters are gone", which is what `enemies_none`/`enemies_amount` actually claim.
 
 ### 2.9 In-game checks for Swarm and the Difficulty dial
 `enemies_none` is verified against a control; `enemies_swarm` and `enemy_difficulty` change bytes

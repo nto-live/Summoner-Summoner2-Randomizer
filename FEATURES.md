@@ -35,7 +35,14 @@ boundary is refused rather than done.
 > **Consequence, stated plainly:** any disc built by the engine **before** that fix is suspect,
 > including the no-enemies discs used for the earlier in-game entity comparison. The door results
 > are unaffected — those discs were built by the lab applier from absolute ISO offsets, not through
-> the engine — but the enemy effect needs re-verifying on a disc built with the fixed reader.
+> the engine — but the enemy effect needed re-verifying on a disc built with the fixed reader.
+>
+> **Done 2026-09-22.** Both were rebuilt from the clean retail disc through the fixed reader and
+> re-checked in the emulator: `Summoner-noenemies-ENEMYFIX1.iso` (`D65C80C2…2932`) still suppresses
+> enemies — catacombs 96 → **18** living entities against a vanilla control on the same route — and
+> the engine-built door disc `Summoner-doorremap-DOOR1.iso` (`0FEDE7A7…0807`) loads a **different
+> level than vanilla** for the same door, read off the live game (`DOOR-REMAP.md` §4.5b). Both
+> are **play-verified with harness-forced door gates**; an honest un-forced crossing is still open.
 
 ---
 
@@ -95,7 +102,7 @@ uses a dial must set a value, and mode values are defaults, not overrides.**
 
 | Transform | Edits | Bytes | Status | Notes |
 |---|---:|---:|---|---|
-| `door_destination_remap` | 200 | 1,568 | built, unverified in game | **the headline feature.** All **218** doors found by parsing the stream; 200 destinations rewritten at seed `DOOR1`, 18 landed on the name they already had, 0 skipped. Every field is `len(old)+1` bytes in and out. Measured against the disc, not the fixture — see §0 |
+| `door_destination_remap` | 200 | 1,568 | **verified in game** — forced gates | **the headline feature.** All **218** doors found by parsing the stream; 200 destinations rewritten at seed `DOOR1`, 18 landed on the name they already had, 0 skipped. Every field is `len(old)+1` bytes in and out. Measured against the disc, not the fixture — see §0. In game 2026-09-22 on the **engine-built** disc: `masad`'s door loads `lenele1c` where vanilla loads `worldmap1`, read off the running game (`DOOR-REMAP.md` §4.5b). Reachability still unchecked |
 | `npc_character_shuffle` | 5,659 | 61,270 | built, unverified | 6,315 `$Character` values across 25 length classes — who stands where |
 | `enemies_swarm` | 1,800 | 22,550 | built, unverified | 1,800 peaceful placements re-pointed at hostile creatures; 219 skipped (no same-length name). Eats quest NPCs — chaos tier |
 | `enemies_random` | 1,697 | 14,277 | built, unverified | swaps which creature stands on each of 2,220 placements + shuffles `+Level:` |
@@ -124,8 +131,8 @@ uses a dial must set a value, and mode values are defaults, not overrides.**
 
 | Transform | Edits | Bytes | Status | Notes |
 |---|---:|---:|---|---|
-| `enemies_none` | 4,067 | 12,201 | **verified in game** | all 2,220 monster placements unlinked from their navpoints; control run: Liangshan 100→17, sewer 65→12 (`ENEMIES.md` §4) |
-| `enemies_amount` | 4,067 | 12,201 | built, unverified | the enemy-count dial (`none/few/normal/many/all`); value `none` reproduces the verified `enemies_none` byte for byte. Measured at every value below |
+| `enemies_none` | 4,067 | 12,201 | **verified in game** | all 2,220 monster placements unlinked from their navpoints; control run: Liangshan 100→17, sewer 65→12 (`ENEMIES.md` §4). **Re-verified 2026-09-22 on a fixed-reader build** (`Summoner-noenemies-ENEMYFIX1.iso`, `D65C80C2…`): catacombs 96 → **18** living entities, masad 58 → 38, same route |
+| `enemies_amount` | 4,067 | 12,201 | built, unverified (value `none` excepted) | the enemy-count dial (`none/few/normal/many/all`); value `none` reproduces the verified `enemies_none` byte for byte, so it inherits the 2026-09-22 re-verification; the other four values are still unwatched. Measured at every value below |
 | `enemy_difficulty` | 803 | 1,685 | built, unverified | 51 hostile stat sheets + 293 placement levels; dial `trivial/easy/normal/hard/brutal/deadly/impossible` |
 | `creature_stats_shuffle` | 1,572 | 2,183 | built, unverified | 337 `$Speed`, 337 `$Weight`, 365 `$Attack Radius` |
 
@@ -175,7 +182,7 @@ does, not a promise.
 | Vanilla | `vanilla` | 0 | — | baseline |
 | **No Enemies** | `peaceful` | 1 | how=navpoint | **verified in game** |
 | Door Shuffle | `doors` | 3 | — | cosmetics only: door locks, names and sounds, *never* where a door leads |
-| **Door Remap** | `door_remap` | 1 | how=shuffle | **built, unverified in game** — rewrites where all 218 doors lead; changes the level graph |
+| **Door Remap** | `door_remap` | 1 | how=shuffle | **verified in game** — rewrites where all 218 doors lead; changes the level graph. Reachability still unchecked |
 | Chaos | `chaos` | 5 | — | unverified |
 | Short Run | `short` | 2 | — | unverified |
 | One Hour | `one_hour` | 3 | — | unverified |
