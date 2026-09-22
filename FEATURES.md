@@ -20,6 +20,23 @@ Status vocabulary, and it is used strictly:
 stream, so a value is only ever rewritten inside its own field width. A run that would move a
 boundary is refused rather than done.
 
+> **Measurements re-taken 2026-09-21 23:16, after the archive-reader fix.** The engine had been
+> reading every `TABLES.VPP` entry from a fixed `0x1000` instead of the next `0x800` boundary after
+> the table of contents (`0x9000` here). That shifted every entry by 32 KB and dropped the last
+> ~620 KB — the 52 level files, and with them all 218 doors and 59 of 160 `#Character Info` blocks.
+> Fixed in `rando_core.py` (`data_start()`), the measurement fixture regenerated, and the numbers in
+> these tables re-measured against the corrected stream. Nine transforms gained content as a result
+> (`sound_shuffle` 1,681 → **3,008**, `model_ref_shuffle` 2,380 → **3,658**, `music_shuffle`
+> 1,109 → **1,565**, `animation_shuffle` 2,165 → **3,447**, `vfx_shuffle` 352 → **530**,
+> `creature_stats_shuffle` 1,285 → **1,572**, `enemies_swarm` 1,783 → **1,800**, `permadeath`
+> 8 → **11**, `npc_character_shuffle` 5,588 → **5,659**). `enemies_none` is **byte-identical** at
+> 4,067 edits.
+>
+> **Consequence, stated plainly:** any disc built by the engine **before** that fix is suspect,
+> including the no-enemies discs used for the earlier in-game entity comparison. The door results
+> are unaffected — those discs were built by the lab applier from absolute ISO offsets, not through
+> the engine — but the enemy effect needs re-verifying on a disc built with the fixed reader.
+
 ---
 
 ## 0. Where the features actually live — read this first
@@ -79,10 +96,10 @@ uses a dial must set a value, and mode values are defaults, not overrides.**
 | Transform | Edits | Bytes | Status | Notes |
 |---|---:|---:|---|---|
 | `door_destination_remap` | 200 | 1,568 | built, unverified in game | **the headline feature.** All **218** doors found by parsing the stream; 200 destinations rewritten at seed `DOOR1`, 18 landed on the name they already had, 0 skipped. Every field is `len(old)+1` bytes in and out. Measured against the disc, not the fixture — see §0 |
-| `npc_character_shuffle` | 5,588 | 60,659 | built, unverified | 6,256 `$Character` values across 25 length classes — who stands where |
-| `enemies_swarm` | 1,783 | 23,280 | built, unverified | 1,783 peaceful placements re-pointed at hostile creatures; 234 skipped (no same-length name). Eats quest NPCs — chaos tier |
+| `npc_character_shuffle` | 5,659 | 61,270 | built, unverified | 6,315 `$Character` values across 25 length classes — who stands where |
+| `enemies_swarm` | 1,800 | 22,550 | built, unverified | 1,800 peaceful placements re-pointed at hostile creatures; 219 skipped (no same-length name). Eats quest NPCs — chaos tier |
 | `enemies_random` | 1,697 | 14,277 | built, unverified | swaps which creature stands on each of 2,220 placements + shuffles `+Level:` |
-| `model_ref_shuffle` | 2,380 | 26,130 | built, unverified | 2,426 `.mvf` model refs |
+| `model_ref_shuffle` | 3,658 | 40,210 | built, unverified | 3,689 `.mvf` model refs |
 | `item_scatter` | 155 | 1,944 | built, unverified | which item sits at which loose pickup (177 `$Item`) |
 | `shop_shuffle` | 348 | 423 | built, unverified | 479 `$Value` prices |
 | `shops_free` | 477 | 530 | built, unverified | every `$Value` price → `0`, padded to the field's own width (2 were already 0) |
@@ -91,16 +108,16 @@ uses a dial must set a value, and mode values are defaults, not overrides.**
 | `chest_shuffle` | 23 | 24 | built, unverified | weak by nature: most single-digit `+Give` values are item counts |
 | `spawn_shuffle` | 4,467 | 9,737 | built, unverified | 4,594 `$Start position` anchors — relocates who stands where |
 | `material_shuffle` | 76 | 272 | built, unverified | 337 `$Material`, 5 length classes |
-| `sound_shuffle` | 1,681 | 24,425 | built, unverified | 1,808 `.wav` refs |
-| `music_shuffle` | 1,109 | 14,725 | built, unverified | `$Soundtrack` + `$Sound` |
+| `sound_shuffle` | 3,008 | 44,334 | built, unverified | 3,272 `.wav` refs |
+| `music_shuffle` | 1,565 | 19,928 | built, unverified | `$Soundtrack` + `$Sound` |
 | `icon_shuffle` | 478 | 2,492 | built, unverified | `$Icon` + `.vbm` refs |
-| `vfx_shuffle` | 352 | 3,719 | built, unverified | 412 `.vfx` refs |
+| `vfx_shuffle` | 530 | 6,415 | built, unverified | 590 `.vfx` refs |
 | `camera_shuffle` | 150 | 750 | built, unverified | `$Camera` + `.csc` |
 | `fog_shuffle` | 53 | 58 | built, unverified | 101 `$Fog` |
 | `slot_shuffle` | 104 | 436 | built, unverified | 280 `+Slot` |
 | `dialogue_shuffle` | 4,938 | 554,905 | built, unverified | 5,452 `+NPCText` + 201 `+Messagebox`; topic ids deliberately untouched |
 | `action_shuffle` | 5,155 | 35,301 | built, unverified | 11,606 `+Action` verbs across 12 length classes — **can break scripted sequences** |
-| `animation_shuffle` | 2,165 | 24,404 | built, unverified | `$Animation` + `+Animation class` |
+| `animation_shuffle` | 3,447 | 38,275 | built, unverified | `$Animation` + `+Animation class` |
 | `cutscene_shuffle` | 72 | 733 | built, unverified | 84 `$Cutscene` names |
 
 ## 2. Enemies
@@ -110,7 +127,7 @@ uses a dial must set a value, and mode values are defaults, not overrides.**
 | `enemies_none` | 4,067 | 12,201 | **verified in game** | all 2,220 monster placements unlinked from their navpoints; control run: Liangshan 100→17, sewer 65→12 (`ENEMIES.md` §4) |
 | `enemies_amount` | 4,067 | 12,201 | built, unverified | the enemy-count dial (`none/few/normal/many/all`); value `none` reproduces the verified `enemies_none` byte for byte. Measured at every value below |
 | `enemy_difficulty` | 803 | 1,685 | built, unverified | 51 hostile stat sheets + 293 placement levels; dial `trivial/easy/normal/hard/brutal/deadly/impossible` |
-| `creature_stats_shuffle` | 1,285 | 1,781 | built, unverified | 337 `$Speed`, 337 `$Weight`, 306 `$Attack Radius` |
+| `creature_stats_shuffle` | 1,572 | 2,183 | built, unverified | 337 `$Speed`, 337 `$Weight`, 365 `$Attack Radius` |
 
 **`enemies_amount` — measured at every value** (retail stream, seed `4242`; every value size-preserving):
 
@@ -133,7 +150,7 @@ An unknown `amount` is refused: 0 edits, nothing changed, and a note saying so.
 | `levelcap_set` | 26 @200% | 40 | built, unverified | 26 `+Levelcap:` values |
 | `xp_boost` / `xp_nerf` | 172 / 248 | 587 / 777 | built, unverified | fixed-factor versions of the same dial |
 | `levelcap_raise` | 25 | 38 | built, unverified | pushes caps toward 50 |
-| `permadeath` | 8 | 62 | built, unverified | revive ability renamed; grant sites orphaned, definition left intact |
+| `permadeath` | 11 | 80 | built, unverified | revive ability renamed; grant sites orphaned, definition left intact |
 | `economy_squeeze` | 534 | 1,533 | built, unverified | prices up, gold down |
 | `endgame_gate` *(binary)* | 1 word | 1 byte | **verified in game** | lowers the gamestage threshold that arms the ending; the emulator's CRC changes as proof |
 
