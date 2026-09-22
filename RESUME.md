@@ -67,6 +67,11 @@ the reachability guard (`RESEARCH-ENTRANCE-LOGIC.md` §2, §4).
 
 ## The commands that matter
 
+> **From a PowerShell/exec shell, add `-q` to every `cli.py` call.** The engine writes progress to
+> stderr by design (the GUI reads it), and PowerShell 5.1 reports each stderr line as a failed
+> command, so a successful build shows up as "Exec failed". `-q` keeps progress in `--log` only.
+> The exit code and the artifact are the truth; that banner is not.
+
 ```powershell
 # boot a disc headlessly, print PASS/PARTIAL/FAIL
 powershell -File F:\rando\S1\notes\pcsx2_headless_boot.ps1 -Iso "<path>.iso" -Seconds 75

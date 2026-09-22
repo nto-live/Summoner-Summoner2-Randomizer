@@ -16,6 +16,10 @@ reads progress from stderr and the final result from stdout as JSON.
 Exit codes: 0 ok, 2 refused (disc not supported), 1 error.
 Progress lines on stderr look like:  #progress <message>
 
+-q / --quiet keeps that progress OFF stderr and in the --log file only. Use it from any shell
+that treats a native command's stderr as failure (Windows PowerShell 5.1 turns every `#progress`
+line into a NativeCommandError record, so a perfectly good build reports as a failed command).
+
 Testing surface (engine-side, no GUI needed):
 
     python cli.py --verify "D:\out.iso"                    # is this a valid, playable image?
@@ -50,6 +54,7 @@ except ImportError:
 _LOG = None
 _REPORT = None
 _VERBOSE = 0          # 0 quiet-ish (default), 1 -v, 2 -vv, 3 -vvv (per-field detail)
+_QUIET = False        # -q: no progress on stderr at all (still written to --log)
 _T0 = time.time()
 
 
@@ -68,9 +73,14 @@ def _emit_log(line: str) -> None:
 
 
 def _progress(msg: str) -> None:
-    """A progress line. Timestamped once verbose - the GUI strips the marker either way."""
+    """A progress line. Timestamped once verbose - the GUI strips the marker either way.
+
+    -q suppresses the stderr half (some shells count native stderr as a failed command); the log
+    file still gets every line, so nothing is lost from a bug report.
+    """
     prefix = f"{_stamp()} " if _VERBOSE else ""
-    print(f"#progress {prefix}{msg}", file=sys.stderr, flush=True)
+    if not _QUIET:
+        print(f"#progress {prefix}{msg}", file=sys.stderr, flush=True)
     _emit_log(f"#progress {prefix}{msg}")
 
 
@@ -78,7 +88,8 @@ def _dbg(msg: str, level: int = 2) -> None:
     """Extra detail for developers. -vv or higher; never reaches stdout."""
     if _VERBOSE >= level:
         line = f"#progress {_stamp()}   {msg}"
-        print(line, file=sys.stderr, flush=True)
+        if not _QUIET:
+            print(line, file=sys.stderr, flush=True)
         _emit_log(line)
 
 
@@ -341,11 +352,14 @@ def main() -> int:
     ap.add_argument("--report", help="write the final JSON result to this file")
     ap.add_argument("-v", "--verbose", action="count", default=0,
                     help="more output: -v stages, -vv detail, -vvv per-field")
+    ap.add_argument("-q", "--quiet", action="store_true",
+                    help="no progress on stderr (still written to --log); for shells that fail on it")
     a = ap.parse_args()
 
-    global _REPORT, _VERBOSE
+    global _REPORT, _VERBOSE, _QUIET
     _REPORT = a.report
     _VERBOSE = min(3, max(0, a.verbose or 0))
+    _QUIET = bool(a.quiet)
     _open_log(a.log, sys.argv)
 
     if isinstance(a.transforms, str):
