@@ -161,6 +161,40 @@ Seed URLs / seed cards, SotN style. Seeds are already reproducible; this is the 
 
 ---
 
+### 2.12 `music_replace` — put *other* music in
+**Requested as:** "can we replace the music with other music?"
+**What the music is (measured 2026-09-21):** `MUSIC.VPP`, 131 tracks named in plaintext
+(`catacombs.vmu`, `credits.vmu`, …), 428,976,128 bytes, `.vmu` = a Volition container decoded by
+the game's own `vmusic` engine (`vmusic::open` `0x0015ACB0`, `process_block_read` `0x0015B010`).
+TOC records are 64 bytes from `0x800` and carry a **size but no offset**; data starts at **0x3000**
+(derived: archive − sum of sizes rounded to 2048 = 12,288) and **every entry is 2048-aligned**.
+**Why that is good news:** a replacement that is the same length or shorter needs **no offset
+fixups** — write it into the slot, zero-pad the alignment, and the archive, the ISO size and every
+other entry are untouched. Longer tracks shift everything after them and need a full rebuild,
+which is a different (and more carefully tested) path.
+**The blocking task:** `.vmu` is a custom codec — no `VAGp`/`RIFF`/`OggS` magic anywhere. Decode
+`vmusic` in the Ghidra project to get the block structure and sample format, then write an encoder
+or transcoder. Bounded, and the only thing standing in the way.
+**Legal line, drawn now:** the randomizer ships no music, ever — only the user's own audio or
+generated/CC0 material they supply. `music_shuffle` (which track plays where) already ships and
+involves no new media.
+Full findings: `RESEARCH-RANDOMIZER-OPTIONS.md` §8.
+
+### 2.13 Adopted from other randomizers
+Mined from OoTR, ALttPR/Archipelago, Enemizer, Super Metroid and Zelda 1 — full table in
+`RESEARCH-RANDOMIZER-OPTIONS.md`. Worth building, in rough value order:
+
+* **Hints over `+NPCText`** — a hint system is pure text-layer work, and this game has thousands of
+  NPC lines to hide hints in. Nobody expects it from a Summoner randomizer.
+* **Entrance "levels"** for the door remap — same-region → crossed → insanity, reusing the remap's
+  own constraint list (how ALttPR and Zelda 1 present the same feature).
+* **Spoiler log + seed sharing** — seeds are already byte-reproducible; this is packaging.
+* **Shop inventory randomisation** — `+Shop` goods swapped between equal-length item names.
+* **Enemy damage shuffle** — hostile `$Damage`/`$Protection`, folded into the stat shuffle.
+* **Trap items** — re-point a `+Gain Item` at a junk item ("ice trap" in OoTR terms).
+
+---
+
 ## 3. BLOCKED — reason and what would unblock it
 
 | Item | Blocked by |
