@@ -246,14 +246,49 @@ The entity-count comparison is a proxy — it counts *living entities*, not mons
 creature type/team for each entity would turn "fewer things are drawn" into "these specific
 monsters are gone", which is what `enemies_none`/`enemies_amount` actually claim.
 
-### 2.16 In-game check for `chest_items` — watch a chest actually yield the new item
-`chest_items` is built, measured on the disc and size-verified (`1.3`), but **no one has clicked a
-container and read what arrived**. The byte-level claim is strong: the `+Messagebox:` name in a
-container block *is* the yield, and 37 of 92 changed at seed `CHEST1`. What is unproven is that the
-game grants by that string rather than merely printing it. What the check needs: reach a container,
-trigger it, and read the received item off the live game (inventory/`received item` readout), then
-repeat on the vanilla disc for the same container. Until that is done, `chest_items` is
-**built and measured, not verified in game** — say so whenever it is described.
+### 2.16 In-game check for `chest_items` — HALF DONE, and the other half is blocked by the harness
+
+**Verified 2026-09-22 (play-verified, unforced A/B).** The auto-walked level loads `masad_script.tbl`
+and its `#Clicks` record index 8 — `Masad-Barrel-Closed03` — was read out of the **running game** on
+both discs, nothing poked for that read:
+
+| disc | live record `+0x04` | `+Give` |
+|---|---|---|
+| vanilla `Summoner.iso` | `Cleansing Tonic` | 1 |
+| `Summoner-chestitems-CHEST1.iso` | **`Healing Draught`** | 1 |
+
+All 18 live records matched `masad_script.tbl`'s file order 1:1 on both discs. Confirmed
+independently at file level as well: the same field (stream offset `0x273C64`) reads
+`Cleansing Tonic` on vanilla and `Healing Draught` on the CHEST1 disc. And the disassembly of the
+grant path settles which field matters — `ngps_int_apply_targeting` (`0x00224110`, click block
+`0x002245A8`) hands `rec+0x04` to the inventory as the item, `rec+0x108` as the amount, with the
+message `"Found %s!"`. So the engine's loader really does feed the rewritten name into the very
+field the grant code consumes.
+
+**Not verified: an actual click.** Nobody has clicked a container and watched the item arrive. The
+interaction/targeting module **never runs headlessly**: the state global `0x01284E3C` read `-1` for
+39,577 consecutive samples, and there is no `jal` to `0x00224110` anywhere in the ELF. Four forced
+approaches were tried — PINE-writing the target index/state; a pnach patch forcing the handler's
+index (`0x2245A8` → `addiu v0,zero,8`); one forcing the dispatcher state (`0x224114` →
+`addiu v1,zero,6`); and disabling the door gates so the game idles in `masad` — every one applied
+and read back, none produced a click, no `"Found …"` message, no inventory change. None of them is
+counted as a result.
+
+**So the state, stated precisely:** `chest_items` is **byte-verified**, **play-verified at the
+record level** (the running game loads and holds the rewritten yield in the field the grant code
+reads), and the **grant itself is unverified**. Say it exactly that way.
+
+**What the remaining check needs:** the interaction path has to run for real, which means either
+driving the player with genuine input (the autoplay pnach holds *every* button down constantly —
+useful for the frontend, wrong for "walk up to a crate and press X") or finding why the targeting
+module idles. Then read the inventory/`"Found %s!"` buffer at `0x01B306D0`.
+
+**Correction for the record:** the containers are not confined to `masad_v2_script.tbl`, and the
+game does **not** load that table on the tested route — it loads `masad_script.tbl`. The same
+container names appear in several level tables (`Well-Base01` in three of them;
+`chest-closed03` / `I-docktrunk14` / `Desk,Closed01-01` do exist in `masad_v2_script.tbl`, while
+`Masad-Barrel-Closed03` lives in `Rand-DesertNite01_v2_script.tbl`). Attribute containers by the
+table the level actually loads, not by name.
 
 ### 2.9 In-game checks for Swarm and the Difficulty dial
 `enemies_none` is verified against a control; `enemies_swarm` and `enemy_difficulty` change bytes

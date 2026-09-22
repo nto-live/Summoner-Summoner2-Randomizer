@@ -6,7 +6,7 @@ bytes) with a fixed seed, and the edit and byte counts are what it actually did.
 `inventory.py`; do not hand-edit the numbers. One row is the exception and says so: the door
 remap's fixture still holds the pre-fix stream, so its numbers come from the disc instead (§0).*
 
-**Counts:** 42 transforms · 34 modes · 8 option-bearing transforms · 6 blocked items.
+**Counts:** 43 transforms · 34 modes · 9 option-bearing transforms · 6 blocked items.
 
 Status vocabulary, and it is used strictly:
 
@@ -113,6 +113,7 @@ uses a dial must set a value, and mode values are defaults, not overrides.**
 | `shops_crazy` | 479 | 1,728 | built, unverified | every `$Value` → all-9s at the field's own width (`999`, `9999`, `999999`) |
 | `shops_none` | 86 | 1,132 | built, unverified | 86 placements naming one of the 46 `+Shop` characters re-pointed at an equal-length non-shopkeeper; the definitions are never touched |
 | `chest_shuffle` | 23 | 24 | built, unverified | weak by nature: most single-digit `+Give` values are item counts |
+| `chest_items` | 40 | 474 | built; **play-verified at the record level**, grant unverified | **the real chest randomisation.** What a container *yields* — the `+Messagebox:` name in a block that also carries `+Give:` — shuffled between equal-length names. 92 containers, 35 distinct yields, 13 pools. On the disc at seed `CHEST1`: 37 yields / 442 bytes (`how=swap`: 50 / 590); fixture (default options) 40 / 474. `+Give:` is never touched; gold only trades with gold (every gold yield is 4 characters and no item name is that short); nothing can be blanked. The `gold` option was built, measured as a no-op and removed. **In game 2026-09-22 (unforced A/B):** the running game's own `#Clicks` record for `Masad-Barrel-Closed03` reads `Cleansing Tonic` on vanilla and `Healing Draught` on the CHEST1 disc — field offset `0x273C64` confirmed at file level too — and `ngps_int_apply_targeting` (`0x00224110`) hands exactly that field (`rec+0x04`) to the inventory, amount `rec+0x108`, message `"Found %s!"`. **Nobody has clicked one:** the interaction module never runs headlessly (state global `0x01284E3C` pinned at `-1` for 39,577 samples, no `jal` to the handler), so the grant stays unverified. See `PLANNED.md` 2.16 |
 | `spawn_shuffle` | 4,467 | 9,737 | built, unverified | 4,594 `$Start position` anchors — relocates who stands where |
 | `material_shuffle` | 76 | 272 | built, unverified | 337 `$Material`, 5 length classes |
 | `sound_shuffle` | 3,008 | 44,334 | built, unverified | 3,272 `.wav` refs |
@@ -200,7 +201,7 @@ does, not a promise.
 | Free Shops | `free_shops` | 1 | — | unverified |
 | Crazy Prices | `crazy_prices` | 1 | — | unverified |
 | No Shops | `no_shops` | 1 | — | unverified — shopkeepers stop existing |
-| Chest Shuffle | `chest_shuffle` | 1 | — | unverified |
+| **Chest Randomisation** | `chest_shuffle` | 2 | how | play-verified at the record level — pays everything out differently *and* changes what a container yields; the grant itself is still unwatched |
 | Dialogue Chaos | `dialogue_chaos` | 1 | — | unverified |
 | Sound Chaos | `sound_chaos` | 2 | — | unverified |
 | Monster Chaos | `monster_chaos` | 2 | — | unverified |
