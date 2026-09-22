@@ -180,18 +180,59 @@ generated/CC0 material they supply. `music_shuffle` (which track plays where) al
 involves no new media.
 Full findings: `RESEARCH-RANDOMIZER-OPTIONS.md` §8.
 
-### 2.13 Adopted from other randomizers
-Mined from OoTR, ALttPR/Archipelago, Enemizer, Super Metroid and Zelda 1 — full table in
-`RESEARCH-RANDOMIZER-OPTIONS.md`. Worth building, in rough value order:
+### 2.13 Adopted from other randomizers — the full list
+Mined from OoTR, ALttPR/Archipelago, Enemizer, Super Metroid and Zelda 1; the complete table with
+sources is `RESEARCH-RANDOMIZER-OPTIONS.md`. Everything below is *not yet built*; the ones this
+project already ships are listed as **exists** in that document and are not repeated here.
 
-* **Hints over `+NPCText`** — a hint system is pure text-layer work, and this game has thousands of
-  NPC lines to hide hints in. Nobody expects it from a Summoner randomizer.
-* **Entrance "levels"** for the door remap — same-region → crossed → insanity, reusing the remap's
-  own constraint list (how ALttPR and Zelda 1 present the same feature).
-* **Spoiler log + seed sharing** — seeds are already byte-reproducible; this is packaging.
-* **Shop inventory randomisation** — `+Shop` goods swapped between equal-length item names.
-* **Enemy damage shuffle** — hostile `$Damage`/`$Protection`, folded into the stat shuffle.
-* **Trap items** — re-point a `+Gain Item` at a junk item ("ice trap" in OoTR terms).
+**Items and locations**
+* `chest_items` — which item a container yields, equal-length names (§1.3, NEXT). **build now**
+* Trap items — re-point a `+Gain Item` at a junk item (OoTR's "ice trap"). **designed**
+* Starting inventory — party/start setup is script-side, not a flagged table. **designed**
+* Progressive items, item pool size, swordless/bombless starts — the item tables live in the
+executable, not the text layer. **blocked**, and honestly so
+
+**Keys, locks and doors**
+* Door destination remap (§2.1, the headline). **QUEUED, first**
+* Entrance "levels" — same-region → crossed → insanity, reusing the remap's own constraint list.
+**designed**, and a natural fit
+* One-way and trap doors — allowed only where the reachability guard passes. **designed**
+* Keysanity — Summoner has no key items; doors are locked by a value, not by a carried key.
+**blocked by the game's design**, worth saying out loud
+
+**Enemies**
+* `enemy_stats_random` (§1.4) — hostile stat numbers shuffled. **build now**
+* Enemy damage/health shuffle — `$Damage`/`$Protection` inside the same shuffle. **build now**
+* Boss shuffle (ALttPR `Basic → Singularity`) — same inventory as Boss Rush (§2.3), different use:
+reshuffle which boss stands where instead of gathering them. **designed**
+* Aggression/vision dials (stealth seeds) — already exposed via the difficulty dial. **exists**
+
+**Shops and economy**
+* Percentage price dial (`Shop Price Modifier`) — `shops_crazy`/`shops_free` exist; a percentage
+sits between them. **build now**
+* Shop inventory randomisation — `+Shop` goods swapped between equal-length item names. **designed**
+* "Scams" — a merchant selling junk; same lever as above. **designed**
+* Cheap-healer quality of life — prices again. **build now**
+
+**Stats, difficulty and pacing**
+* Player stat shuffle (§1.4). **build now**
+* Damage multiplier as its own dial. **build now**
+* Timed runs / countdown — engine already keeps the clock; plan in `TIMER-DESIGN.md`.
+**designed**, deferred by the owner's request
+
+**Hints, information and goals**
+* **Hint system over `+NPCText`** — thousands of NPC lines to hide hints in; pure text-layer work.
+**designed, and the most distinctive idea on this list**
+* Goal selection — `ring_hunt` already changes the ending gate; a "kill N bosses" goal needs a
+counter (same blocker as Collectionthon). **half exists**
+* Spoiler log + seed sharing — seeds are already byte-reproducible; this is packaging. **build now**
+* Death Link / multiworld — would need a networked harness. **out of scope by design** (this tool is
+self-contained and offline)
+
+**Chaos, cosmetic and audio**
+* `music_replace` (§2.12) — **designed**, blocked on decoding `.vmu`
+* Palette/colour swaps — `.peg` palettes, undecoded. **blocked**
+* Model swaps — shuffling `.mvf` refs ships; *new* models are blocked on the format. **half exists**
 
 ---
 
