@@ -271,10 +271,10 @@ Each one is mapped to its mechanism and its honest state in **`MODES.md` → "Re
 owner's list, organised"**. The work order below is mostly built now:
 
 * **Built (unverified)** — `enemies_amount` (4,067 at `none` / 2,852 at `few` / 0 at `normal` / 872 at `many` / 1,783 at `all`), `shops_free` (477), `shops_crazy` (479), `shops_none` (86). These are in the measured
-  catalogue above; none is verified in game yet.
-* **Still to build** — `chest_items`, `player_stats_random`, `enemy_stats_random`, `rooms_shuffle`
+  catalogue above; none of them has been watched in game yet.
+* **Still to build** — `player_stats_random`, `enemy_stats_random`, `rooms_shuffle`
   (all mechanism-known), plus **Boss Rush / NPC Hunt (cross-level)** which need an inventory first,
   and **Collectionthon** which stays blocked with its reason (the game has no collection counter).
 
-Work order, value ÷ risk: `enemies_amount` → the three shop levers → `chest_items` → the two stat
-transforms → `rooms_shuffle` → Boss Rush → Collectionthon.
+Work order, value ÷ risk: ~~`enemies_amount` → the three shop levers → `chest_items`~~ *(all three
+built)* → the two stat transforms → `rooms_shuffle` → Boss Rush → Collectionthon.

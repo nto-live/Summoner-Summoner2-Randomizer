@@ -833,6 +833,111 @@ def t_chest_shuffle(blob, rng):
     return out, rep
 
 
+# A container is a block that carries BOTH `+Give:` and `+Messagebox:`. `+Give:` is the AMOUNT
+# (a count, or a gold sum); the thing you actually receive is the `+Messagebox:` string:
+#
+#     $Name: "I-docktrunk14"
+#     +Give: 1
+#     +Messagebox: "Amethyst"
+#
+# Measured on the retail stream 2026-09-22: 92 such blocks, 35 distinct yields (no quoted item
+# name exists inside `+Give:` anywhere - the field is numeric on every block).
+_BLOCK_ANCHOR_RE = re.compile(rb"(?m)^(?:\$Name:|#)")
+_MSGBOX_RE = re.compile(rb'\+Messagebox:\s*"([^"]+)"')
+_GOLD = b"gold"
+
+
+def _container_yields(blob: bytes) -> list[tuple[int, int, bytes]]:
+    """(start, end, name) of the yield field of every container block in the stream."""
+    anchors = [m.start() for m in _BLOCK_ANCHOR_RE.finditer(blob)]
+    anchors.append(len(blob))
+    found = []
+    for a, c in zip(anchors, anchors[1:]):
+        blk = blob[a:c]
+        if b"+Give:" not in blk or b"+Messagebox:" not in blk:
+            continue
+        mb = _MSGBOX_RE.search(blk)
+        if mb:
+            found.append((a + mb.start(1), a + mb.end(1), mb.group(1)))
+    return found
+
+
+def t_chest_items(blob, rng, how="shuffle"):
+    """Shuffle WHAT a container yields - the `+Messagebox:` name - between equal-length names.
+
+    The payout amount (`+Give:`) is deliberately not touched; that is `chest_shuffle`'s job. This
+    is the real chest randomisation: a crate that held a tonic can hold something precious.
+
+    `how` - "shuffle" permutes all yields inside a length class; "swap" trades pairs.
+
+    Gold chests are always pooled among themselves. That is not a policy knob because it cannot
+    be anything else on this disc: measured 2026-09-22, every gold yield is the 4-character string
+    `Gold`/`gold` and **no item name in the container catalogue is 4 characters long**, so gold
+    can only ever trade with gold (91 movable yields; 20 of them gold).
+
+    Size-preserving by construction: a name only ever moves into a field of the same length, and
+    a name is never blanked, so no container ends up empty.
+
+    Rings are out of scope on purpose: container grants do not set the `got_ring_of_*` flags
+    (see `PLANNED.md` 1.3), so ring progression cannot be routed through containers. No ring name
+    appears in the container catalogue, and a permutation cannot introduce one.
+    """
+    rep = Report("chest_items")
+    if how not in ("shuffle", "swap"):
+        rep.notes.append(f"unknown how={how!r} - refused, nothing changed")
+        return blob, rep
+
+    fields = _container_yields(blob)
+    if not fields:
+        rep.notes.append("no container blocks (+Give: together with +Messagebox:) found - "
+                         "nothing changed")
+        return blob, rep
+
+    # a case-only twin (Gold vs gold) is the same yield to a case-insensitive lookup, so those
+    # entries are pooled together and never counted as a change on their own
+    pools: dict[tuple[str, int], list] = {}
+    for start, end, name in fields:
+        kind = "gold" if name.lower() == _GOLD else "item"
+        pools.setdefault((kind, len(name)), []).append((start, end, name))
+
+    out = bytearray(blob)
+    changed = skipped = movable = 0
+    for (_kind, _ln), members in sorted(pools.items()):
+        if len(members) < 2:
+            skipped += len(members)
+            continue
+        movable += len(members)
+        vals = [m[2] for m in members]
+        shuf = vals[:]
+        if how == "swap":
+            order = list(range(len(vals)))
+            rng.shuffle(order)
+            for i in range(0, len(order) - 1, 2):
+                a, b = order[i], order[i + 1]
+                shuf[a], shuf[b] = shuf[b], shuf[a]
+        else:
+            rng.shuffle(shuf)
+        for (start, end, old), new in zip(members, shuf):
+            if new == old or new.lower() == old.lower():
+                skipped += 1
+                continue
+            out[start:end] = new
+            changed += 1
+
+    rep.changed = changed
+    n_gold = sum(1 for f in fields if f[2].lower() == _GOLD)
+    rep.notes.append(f"{len(fields)} container yields found ({n_gold} gold, "
+                     f"{len(fields) - n_gold} items) in {len(pools)} length/kind pool(s)")
+    rep.notes.append(f"{changed} yields rewritten, {skipped} left as they were "
+                     f"({movable} were movable)")
+    rep.notes.append("the item NAME is the +Messagebox: string, NOT +Give: - that field is an "
+                     "amount (a count or a gold sum) and it is left alone here")
+    rep.notes.append("gold is pooled separately and cannot become an item: every gold yield is "
+                     "4 characters and no item name is that short")
+    rep.notes.append("size-preserving: names only move into same-length fields, never blanked")
+    return bytes(out), rep
+
+
 def t_dialogue_shuffle(blob, rng):
     """Shuffle spoken text so NPCs say each other's lines.
 
@@ -1784,9 +1889,17 @@ def mode_options(mode: str, options: dict | None = None) -> dict:
 # transforms that accept keyword options from the request
 OPTION_AWARE = {"ring_hunt", "xp_scale", "levelcap_set", "permadeath", "enemy_difficulty",
                 "enemies_none", "enemies_swarm", "enemies_random", "enemies_amount",
-                "door_destination_remap"}
+                "door_destination_remap", "chest_items"}
 
 OPTIONS = {
+    "chest_items": {
+        "how": {
+            "type": "choice", "default": "shuffle", "choices": ["shuffle", "swap"],
+            "label": "How",
+            "help": "'shuffle' permutes every yield inside its own length class · "
+                    "'swap' trades pairs instead",
+        },
+    },
     "xp_scale": {
         "percent": {
             "type": "int", "default": 100, "min": 5, "max": 999,
@@ -1999,6 +2112,12 @@ TRANSFORM_INFO = {
         "Shuffles +Give payouts among equal widths. Most single digits are item "
         "counts, so only the multi-digit gold payouts really move.",
     ),
+    "chest_items": (
+        "Chest contents",
+        "Shuffles WHAT a container yields — the +Messagebox: name in a block that also "
+        "carries +Give: — between equal-length names, so a cheap crate can hold something "
+        "precious. The amount is not touched.",
+    ),
     "dialogue_shuffle": (
         "Dialogue chaos",
         "Shuffles spoken text so NPCs say each other's lines. Topic ids are left "
@@ -2112,6 +2231,7 @@ TRANSFORMS = {
     "item_scatter": t_item_scatter,
     "shop_shuffle": t_shop_shuffle,
     "chest_shuffle": t_chest_shuffle,
+    "chest_items": t_chest_items,
     "dialogue_shuffle": t_dialogue_shuffle,
     "fade_instant": t_fade_instant,
     "dialogue_blank": t_dialogue_blank,
@@ -2299,9 +2419,10 @@ MODES = {
         "risk": "medium - shopkeepers stop existing; quests that need one cannot complete",
     },
     "chest_shuffle": {
-        "label": "Chest Shuffle",
-        "blurb": "Container payouts shuffled. Only the multi-digit gold chests really move.",
-        "transforms": ["chest_shuffle"],
+        "label": "Chest Randomisation",
+        "blurb": "Container payouts shuffled AND the yield itself randomised, so a crate can "
+                 "hold something precious. Gold chests stay gold.",
+        "transforms": ["chest_shuffle", "chest_items"],
         "risk": "low",
     },
     "dialogue_chaos": {

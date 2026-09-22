@@ -39,7 +39,7 @@ of: **exists** (shipped), **build now** (mechanism known, size-preserving, no un
 | **How many enemies?** | one dial over one mechanism set: `none` = navpoint-unlink (already proven in game), `few` = unlink a seeded majority, `normal` = untouched, `many` = convert a seeded share of peaceful placements to monsters, `all` = convert all of them | **built, unverified** — `enemies_amount` (4,067 / 2,852 / 0 / 872 / 1,783 edits across none / few / normal / many / all); subsumes three of the items below |
 | **Randomized (enemies)?** | swap which creature stands on each placement, and its `+Level:`, between equal-length values | **exists** (`enemies_random`) — needs exposing as a dial rather than a separate mode |
 | **No enemies?** | every monster placement unlinked from its navpoint | **exists and verified in game** (`enemies_none`) — now also `enemies_amount: none`, which reproduces it byte for byte (4,067 edits) |
-| **Chest randomisation** | payouts shuffled (`chest_shuffle`, ships) **and** which *item* a container yields (`+Give` names), between equal-length item names | **half exists** — `chest_items` is **build now** |
+| **Chest randomisation** | payouts shuffled (`chest_shuffle`) **and** what a container actually yields — the `+Messagebox:` name in a block that also carries `+Give:` — between equal-length names | **exists** — `chest_items` (40 edits / 474 bytes), folded into the mode `chest_shuffle`, now labelled **Chest Randomisation**; measured, not yet watched in game |
 | **Shop randomisation** | every `$Value` price shuffled among equal widths | **exists** (`shop_shuffle`) |
 | **Make it all free** | every `$Value` price → `0`, same field width | **built, unverified** — `shops_free` (477 edits) |
 | **Make it all crazy numbers** | every `$Value` → the largest value its field can hold (`999`, `9999`…) | **built, unverified** — `shops_crazy` (479 edits) |
@@ -55,7 +55,7 @@ Ordered by value ÷ risk, all size-preserving:
 
 1. `enemies_amount` — one dial that covers "how many enemies", "no enemies" and "oops all enemies" — **done**
 2. `shops_free`, `shops_crazy`, `shops_none` — three small, self-contained shop levers — **done**
-3. `chest_items` — real chest randomisation instead of payout shuffling
+3. `chest_items` — real chest randomisation instead of payout shuffling — **done** (40 edits / 474 bytes; the yield is the `+Messagebox:` name, not `+Give:`; measured, not yet watched in game)
 4. `player_stats_random`, `enemy_stats_random` — the two stats items
 5. `rooms_shuffle` — the safe half of the room idea
 6. **Boss Rush** — needs a boss inventory first
@@ -75,7 +75,7 @@ Ordered by value ÷ risk, all size-preserving:
 | **Free Shops** | every shop price → `0`, same field width | 1 | low |
 | **Crazy Prices** | every shop price → the largest value its field holds | 1 | low |
 | **No Shops** | shopkeeper placements re-pointed so no shop can be reached | 1 | medium |
-| **Chest Shuffle** | container payouts | 1 | low |
+| **Chest Randomisation** | container payouts **and** which item a container yields | 2 | low |
 | **Dialogue Chaos** | NPCs say each other's lines | 1 | low |
 | **Sound Chaos** | every sound effect and music cue | 2 | low |
 | **Visual Chaos** | item icons, spell effects, fog, cameras | 4 | low |

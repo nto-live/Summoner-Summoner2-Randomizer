@@ -64,13 +64,52 @@ class had candidates, so nothing was skipped; the definitions are never touched.
 transforms `shops_free`, `shops_crazy`, `shops_none` and modes `free_shops`,
 `crazy_prices`, `no_shops`. See `FEATURES.md` §1.
 
-### 1.3 `chest_items` — randomise what a chest *yields*
+### 1.3 `chest_items` — randomise what a chest *yields* — **DONE**
 **Requested as:** "Chest Randomization" (the real version).
-**Mechanism:** `chest_shuffle` today moves the payout *numbers*; this moves the **item names**
-inside `+Give`, between equal-length names, so a cheap chest can hold something precious.
-**Caveat carried from research:** chest `+Give` does not set the `got_ring_of_*` flags, and the
+**Mechanism:** `chest_shuffle` today moves the payout *numbers*; this moves **which item the
+container actually yields**. **Where that item name actually lives was wrong in this plan and was
+corrected while building it** — see the note below: it is the block's `+Messagebox:` string, not a
+name inside `+Give:`.
+**Caveat carried from research:** container grants do not set the `got_ring_of_*` flags, and the
 Ring of Jade has no grant record anywhere — so ring progression cannot be routed through chests.
 **Acceptance:** item names change, counts preserved, no chest left empty.
+
+**Built 2026-09-22 — transform `chest_items`, measured on the retail stream and on a built disc:**
+
+**The plan had the field wrong.** `+Give:` is an *amount* — a count, or a gold sum. Measured on the
+whole retail stream: **92 `+Give:` fields, every one of them numeric, zero quoted names**. The item
+you receive is the **`+Messagebox:`** string in the same block:
+
+```
+$Name: "I-docktrunk14"
++Give: 1
++Messagebox: "Amethyst"
+```
+
+So a container is *a block carrying both `+Give:` and `+Messagebox:`* — **92** of those exist (no
+block has `+Give:` without one, and none carries two), yielding **35 distinct names**: tonics,
+draughts, elixirs, scrolls/runes/tomes/tracts, five gem types, brews, `Volume 67`, and gold.
+
+**Measured, all size-preserving:** on the disc at seed `CHEST1`, `how=shuffle` rewrites **37 yields
+/ 442 bytes**; `how=swap` rewrites **50 / 590**; an unknown `how` is refused with nothing changed.
+On the fixture stream (`inventory.py`, default options): **40 edits / 474 bytes**. A real build:
+`Summoner-chestitems-CHEST1.iso`, sha256 `83A40DED…0AE5`, **1,232,699,392 → 1,232,699,392**,
+whole-image diff **442 bytes, 0 outside `TABLES.VPP`**, and `--verify` passes every check.
+
+**Gold is pooled separately, and that is not a knob** — a `gold: keep|mix` option was built first
+and then **removed**: every gold yield is the 4-character string `Gold`/`gold`, and **no item in
+the catalogue is 4 characters long**, so the option could not change anything. A no-op dial is the
+thing this project keeps deleting, so it was not shipped.
+
+**How it works:** a name only ever moves into a field of the same length (length classes range from
+4 to 18 characters), a name is never blanked, and case-only twins (`Gold`↔`gold`, which the game
+looks up case-insensitively) are not counted as changes. Nothing can be lost and no container can
+end up empty. Shipped as transform `chest_items` (option `how`) and folded into the mode
+`chest_shuffle`, now labelled **Chest Randomisation** (2 transforms).
+
+**Not verified in game yet, and it should be:** nobody has clicked a chest and read what arrived.
+The claim "a crate that held a tonic now holds something precious" is measured at the byte level
+and in the document stream, not observed in the running game. See `PLANNED.md` 2.16.
 
 ### 1.4 `player_stats_random`, `enemy_stats_random` — the two stat items
 **Requested as:** "Randomized enemy hp and stats", "Randomized player stats".
@@ -206,6 +245,15 @@ level change) versus one that does (expected: scripted).
 The entity-count comparison is a proxy — it counts *living entities*, not monsters. Reading the
 creature type/team for each entity would turn "fewer things are drawn" into "these specific
 monsters are gone", which is what `enemies_none`/`enemies_amount` actually claim.
+
+### 2.16 In-game check for `chest_items` — watch a chest actually yield the new item
+`chest_items` is built, measured on the disc and size-verified (`1.3`), but **no one has clicked a
+container and read what arrived**. The byte-level claim is strong: the `+Messagebox:` name in a
+container block *is* the yield, and 37 of 92 changed at seed `CHEST1`. What is unproven is that the
+game grants by that string rather than merely printing it. What the check needs: reach a container,
+trigger it, and read the received item off the live game (inventory/`received item` readout), then
+repeat on the vanilla disc for the same container. Until that is done, `chest_items` is
+**built and measured, not verified in game** — say so whenever it is described.
 
 ### 2.9 In-game checks for Swarm and the Difficulty dial
 `enemies_none` is verified against a control; `enemies_swarm` and `enemy_difficulty` change bytes
