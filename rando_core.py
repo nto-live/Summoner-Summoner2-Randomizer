@@ -673,6 +673,129 @@ def t_shop_shuffle(blob, rng):
                             label="$Value price"), rep
 
 
+VALUE_RE = re.compile(rb'(\$Value:\s*)(\d+)')
+NAME_VAL_RE = re.compile(rb'(\$Name\s*:\s*")([^"]+)(")')
+# Either key that can open a definition block: `$Name:` (a placement) or `$Character:` (a
+# dialogue / stat definition). Used to attribute a bare `+Shop` marker to its character.
+KEY_LINE_RE = re.compile(rb'\n[ \t]*(\$Name|\$Character)\s*:\s*"([^"]+)"')
+
+
+def t_shops_free(blob, rng):
+    """Every `$Value` price becomes 0, the field's own width preserved.
+
+    A price only ever moves inside its own digit field, so a 4-digit 7500 becomes 0000 -
+    the same width, a value the loader reads as zero.
+    """
+    rep = Report("shops_free")
+    hits = list(VALUE_RE.finditer(blob))
+    if not hits:
+        rep.notes.append("no $Value fields found")
+        return blob, rep
+    out = bytearray(blob)
+    for m in hits:
+        digits = m.group(2)
+        new = b"0" * len(digits)
+        if new != digits:
+            out[m.start(2):m.end(2)] = new
+            rep.changed += 1
+    rep.notes.append(f"{len(hits)} $Value prices; {rep.changed} set to 0, field width kept")
+    rep.notes.append("a price is only ever rewritten inside its own digit count")
+    return bytes(out), rep
+
+
+def t_shops_crazy(blob, rng):
+    """Every `$Value` becomes the largest value its own field can hold (all 9s).
+
+    A 3-digit field becomes 999, a 6-digit field 999999 - the most the loader can read
+    from that many digits, so nothing ever has to grow.
+    """
+    rep = Report("shops_crazy")
+    hits = list(VALUE_RE.finditer(blob))
+    if not hits:
+        rep.notes.append("no $Value fields found")
+        return blob, rep
+    out = bytearray(blob)
+    for m in hits:
+        digits = m.group(2)
+        new = b"9" * len(digits)
+        if new != digits:
+            out[m.start(2):m.end(2)] = new
+            rep.changed += 1
+    rep.notes.append(f"{len(hits)} $Value prices; {rep.changed} pinned to all-9s of the same width")
+    return bytes(out), rep
+
+
+def _shopkeeper_names(blob: bytes):
+    """Character names whose definition block carries the bare `+Shop` marker.
+
+    In the retail stream `+Shop` is a flag on the character's dialogue/topic definition
+    (a block keyed by `$Character: "Name"`), not on a `#Character Info` stat block. A
+    shopkeeper is therefore the name on the nearest preceding `$Name:`/`$Character:` line;
+    `+Shop` is only ever attached where that key is `$Character:`.
+    """
+    names = set()
+    for m in re.finditer(rb"\+Shop\b", blob):
+        best = None
+        for k in KEY_LINE_RE.finditer(blob, 0, m.start()):
+            best = k
+        if best and best.group(1) == b"$Character":
+            names.add(best.group(2))
+    return names
+
+
+def t_shops_none(blob, rng):
+    """Make every shop absent: the shopkeeper's own placement stops naming them.
+
+    A shop exists because a character whose name matches a `+Shop` definition is reached;
+    the game resolves the shopkeeper by name (`level_script_get_shopkeeper_info(char *)`).
+    So the placement's `$Name:` - the name the game looks up - is re-pointed at an
+    equal-length non-shopkeeper name. The definitions themselves are never touched.
+    When no equal-length non-shopkeeper name exists the placement is skipped and reported.
+    """
+    rep = Report("shops_none")
+    shop_names = _shopkeeper_names(blob)
+    if not shop_names:
+        rep.notes.append("no +Shop definitions found - nothing to remove")
+        return blob, rep
+
+    monsters, peaceful = _analyse_enemies(blob)
+    targets = []
+    for rec in monsters + peaceful:
+        m = NAME_VAL_RE.search(blob[rec["start"]:rec["end"]])
+        if m and m.group(2) in shop_names:
+            targets.append((rec["start"] + m.start(2), rec["start"] + m.end(2), m.group(2)))
+
+    pool: dict[int, set] = {}
+    for rec in peaceful:
+        m = NAME_VAL_RE.search(blob[rec["start"]:rec["end"]])
+        if not m:
+            continue
+        nm = m.group(2)
+        if nm in shop_names:
+            continue
+        pool.setdefault(len(nm), set()).add(nm)
+
+    out = bytearray(blob)
+    skipped = 0
+    for a, b, nm in targets:
+        cands = sorted(pool.get(len(nm), ()))
+        if not cands:
+            skipped += 1
+            continue
+        new = cands[rng.randrange(len(cands))]
+        if new == nm:
+            continue
+        out[a:b] = new
+        rep.changed += 1
+    rep.notes.append(f"{len(shop_names)} shopkeeper definitions; {len(targets)} placements "
+                     f"name one; {rep.changed} re-pointed at an equal-length non-shopkeeper")
+    if skipped:
+        rep.notes.append(f"{skipped} skipped - no equal-length non-shopkeeper name exists")
+    rep.notes.append("only the placement's $Name is rewritten - the +Shop definitions are "
+                     "never touched")
+    return bytes(out), rep
+
+
 def t_chest_shuffle(blob, rng):
     """Shuffle chest/container payouts (+Give amounts) among equal widths."""
     rep = Report("chest_shuffle")
@@ -1002,6 +1125,145 @@ def _hostile_char_blocks(blob: bytes):
     return out
 
 
+def _unlink_monster_navpoints(blob: bytes, monsters, out: bytearray) -> int:
+    """Rewrite every monster placement's `$Start position` (and the matching `$Name`
+    suffix) from `$npcNNN` to `$zzzNNN`, a navpoint that exists nowhere. Same width,
+    so the record stays the same length and can never bind to a position again.
+
+    Returns the number of fields rewritten. Shared by `enemies_none` and
+    `enemies_amount` so the shipped, in-game-verified behaviour is reproduced exactly.
+    """
+    edits = 0
+    for rec in monsters:
+        seg = bytes(blob[rec["start"]:rec["end"]])
+        for m in START_POS_RE.finditer(seg):
+            val = m.group(2)
+            if val.startswith(b"$npc"):
+                off = rec["start"] + m.start(2)
+                out[off:off + len(val)] = b"$zzz" + val[4:]
+                edits += 1
+        for m in re.finditer(rb'"([^"\n]*#)(\$npc[^"\n]*)"', seg):
+            off = rec["start"] + m.start(2)
+            val = m.group(2)
+            out[off:off + len(val)] = b"$zzz" + val[4:]
+            edits += 1
+    return edits
+
+
+def _hostile_name_pool(blob: bytes, monsters) -> dict:
+    """Hostile creature names grouped by name length, from the monster placements.
+
+    Only names whose `#Character Info` block is hostile qualify (when that set is
+    non-empty), because it is the *definition* that carries `$Team: "hostile"`.
+    """
+    hostile_names = set()
+    for s, e in _hostile_char_blocks(blob):
+        m = PLACEMENT_CHAR_RE.search(blob[s:e])
+        if m:
+            hostile_names.add(m.group(2))
+    pool: dict[int, list] = {}
+    for rec in monsters:
+        if hostile_names and rec["char"] not in hostile_names:
+            continue
+        pool.setdefault(len(rec["char"]), [])
+        if rec["char"] not in pool[len(rec["char"])]:
+            pool[len(rec["char"])].append(rec["char"])
+    return pool
+
+
+def _convert_peaceful(blob: bytes, targets, pool, rng: Random, out: bytearray):
+    """Re-point peaceful placements at a hostile name of the same length.
+
+    Returns (converted, skipped). A placement is skipped when no hostile name shares
+    its length - the honest ceiling of this layer, since a name cannot be lengthened.
+    """
+    converted = skipped = 0
+    for rec in targets:
+        cands = sorted(pool.get(len(rec["char"]), ()))
+        if not cands:
+            skipped += 1
+            continue
+        new = cands[rng.randrange(len(cands))]
+        if new == rec["char"]:
+            continue
+        a, b = rec["char_abs"]
+        out[a:b] = new
+        converted += 1
+    return converted, skipped
+
+
+# The enemy-count dial: three requested options are the same lever at different values.
+AMOUNT_VALUES = ("none", "few", "normal", "many", "all")
+
+
+def t_enemies_amount(blob, rng, amount="normal"):
+    """One dial over how many enemies there are.
+
+    * ``none``   - unlink every monster placement from its navpoint. Reproduces the shipped,
+                   in-game-verified `enemies_none(how="navpoint")` byte for byte.
+    * ``few``    - unlink a seeded majority (~70%) of the monster placements.
+    * ``normal`` - vanilla; nothing is edited, and the report says so.
+    * ``many``   - convert a seeded share (~50%) of the peaceful placements into hostile
+                   creatures of equal name length.
+    * ``all``    - convert every convertible peaceful placement (the rest have no hostile
+                   name of their length and are reported as skips).
+
+    Seeded through ``rng`` and therefore deterministic per seed. An unknown value changes
+    nothing and says so.
+    """
+    rep = Report("enemies_amount")
+    amount = str(amount)
+    if amount not in AMOUNT_VALUES:
+        rep.notes.append(f"unknown amount {amount!r} - pick one of {list(AMOUNT_VALUES)}; "
+                         f"nothing changed")
+        return blob, rep
+    if amount == "normal":
+        rep.notes.append("amount='normal' = vanilla by design: 0 edits, nothing changed")
+        return blob, rep
+
+    monsters, peaceful = _analyse_enemies(blob)
+
+    if amount in ("none", "few"):
+        if not monsters:
+            rep.notes.append("no +Monster placements found")
+            return blob, rep
+        out = bytearray(blob)
+        if amount == "none":
+            chosen = monsters
+        else:
+            order = list(range(len(monsters)))
+            rng.shuffle(order)
+            k = max(1, round(len(monsters) * 0.70))
+            chosen = [monsters[i] for i in sorted(order[:k])]
+        rep.changed = _unlink_monster_navpoints(blob, chosen, out)
+        rep.notes.append(f"{len(monsters)} monster placements; {len(chosen)} unlinked from "
+                         f"their navpoints ({amount})")
+        rep.notes.append("$npcNNN -> $zzzNNN: same width, a navpoint that exists nowhere")
+        rep.notes.append("size-preserving; nothing else about the record changes")
+        return bytes(out), rep
+
+    # many / all - re-point peaceful placements at hostile creatures of equal name length
+    pool = _hostile_name_pool(blob, monsters)
+    out = bytearray(blob)
+    if amount == "all":
+        targets = peaceful
+    else:
+        order = list(range(len(peaceful)))
+        rng.shuffle(order)
+        k = max(1, round(len(peaceful) * 0.50))
+        targets = [peaceful[i] for i in sorted(order[:k])]
+    converted, skipped = _convert_peaceful(blob, targets, pool, rng, out)
+    rep.changed = converted
+    rep.notes.append(f"{len(peaceful)} peaceful placements; {len(targets)} targeted; "
+                     f"{converted} now name a monster")
+    if skipped:
+        rep.notes.append(f"{skipped} skipped - no hostile name of that length")
+    rep.notes.append(f"hostile name pool: {sum(len(v) for v in pool.values())} names "
+                     f"in {len(pool)} length classes")
+    rep.notes.append("no bytes added - placements are re-pointed, not created")
+    return bytes(out), rep
+
+
 def t_enemies_none(blob, rng, how="navpoint"):
     """No hostiles. Every monster placement is unlinked from the navpoint it spawns on.
 
@@ -1037,19 +1299,7 @@ def t_enemies_none(blob, rng, how="navpoint"):
         rep.notes.extend(sub.notes)
         return bytes(base), rep
 
-    for rec in monsters:
-        seg = bytes(blob[rec["start"]:rec["end"]])
-        for m in START_POS_RE.finditer(seg):
-            val = m.group(2)
-            if val.startswith(b"$npc"):
-                off = rec["start"] + m.start(2)
-                out[off:off + len(val)] = b"$zzz" + val[4:]
-                rep.changed += 1
-        for m in re.finditer(rb'"([^"\n]*#)(\$npc[^"\n]*)"', seg):
-            off = rec["start"] + m.start(2)
-            val = m.group(2)
-            out[off:off + len(val)] = b"$zzz" + val[4:]
-            rep.changed += 1
+    rep.changed = _unlink_monster_navpoints(blob, monsters, out)
     rep.notes.append(f"{len(monsters)} monster placements unlinked from their navpoints")
     rep.notes.append("$npcNNN -> $zzzNNN: same width, a navpoint that exists nowhere")
     rep.notes.append("size-preserving; nothing else about the record changes")
@@ -1127,31 +1377,9 @@ def t_enemies_swarm(blob, rng, keep_towns=False):
     """
     rep = Report("enemies_swarm")
     monsters, peaceful = _analyse_enemies(blob)
-    hostile_names = set()
-    for s, e in _hostile_char_blocks(blob):
-        m = PLACEMENT_CHAR_RE.search(blob[s:e])
-        if m:
-            hostile_names.add(m.group(2))
-    pool: dict[int, list] = {}
-    for rec in monsters:
-        if hostile_names and rec["char"] not in hostile_names:
-            continue
-        pool.setdefault(len(rec["char"]), [])
-        if rec["char"] not in pool[len(rec["char"])]:
-            pool[len(rec["char"])].append(rec["char"])
+    pool = _hostile_name_pool(blob, monsters)
     out = bytearray(blob)
-    converted = skipped = 0
-    for rec in peaceful:
-        cands = sorted(pool.get(len(rec["char"]), ()))
-        if not cands:
-            skipped += 1
-            continue
-        new = cands[rng.randrange(len(cands))]
-        if new == rec["char"]:
-            continue
-        a, b = rec["char_abs"]
-        out[a:b] = new
-        converted += 1
+    converted, skipped = _convert_peaceful(blob, peaceful, pool, rng, out)
     rep.changed += converted
     rep.notes.append(f"{len(peaceful)} peaceful placements; {converted} now name a monster")
     if skipped:
@@ -1238,7 +1466,7 @@ def mode_options(mode: str, options: dict | None = None) -> dict:
 
 # transforms that accept keyword options from the request
 OPTION_AWARE = {"ring_hunt", "xp_scale", "levelcap_set", "permadeath", "enemy_difficulty",
-                "enemies_none", "enemies_swarm", "enemies_random"}
+                "enemies_none", "enemies_swarm", "enemies_random", "enemies_amount"}
 
 OPTIONS = {
     "xp_scale": {
@@ -1314,6 +1542,17 @@ OPTIONS = {
                     "loading at all. both = navpoint for now.",
         },
     },
+    "enemies_amount": {
+        "amount": {
+            "type": "choice", "default": "normal",
+            "choices": list(AMOUNT_VALUES),
+            "label": "How many enemies",
+            "help": "none = unlink every monster placement from its navpoint (the lever verified "
+                    "in game); few = unlink a seeded ~70%; normal = vanilla, no edits; "
+                    "many = turn a seeded ~50% of the peaceful placements into monsters; "
+                    "all = turn every convertible peaceful placement into a monster.",
+        },
+    },
 }
 
 
@@ -1331,6 +1570,27 @@ TRANSFORM_INFO = {
         "No enemies",
         "Unlinks every monster placement (2,220 of them) from the navpoint it spawns on, and "
         "optionally re-teams the hostile creature definitions. Nothing added, nothing moved.",
+    ),
+    "enemies_amount": (
+        "How many enemies",
+        "One dial over the enemy count: none (unlink every monster placement from its "
+        "navpoint), few (a seeded ~70%), normal (vanilla, no edits), many (a seeded ~50% of "
+        "the peaceful placements become monsters) or all (every convertible peaceful "
+        "placement becomes a monster).",
+    ),
+    "shops_free": (
+        "Free shops",
+        "Every $Value price becomes 0, padded to its own field width. Everything is free.",
+    ),
+    "shops_crazy": (
+        "Crazy prices",
+        "Every $Value price becomes the largest value its own field can hold (all 9s).",
+    ),
+    "shops_none": (
+        "No shops",
+        "Re-points the placements that name a +Shop character at equal-length non-shopkeeper "
+        "names, so the shopkeeper is never reached and the shop is absent from the world. "
+        "The definitions themselves are never touched.",
     ),
     "enemies_random": (
         "Random enemies",
@@ -1519,9 +1779,13 @@ TRANSFORMS = {
     "fade_instant": t_fade_instant,
     "dialogue_blank": t_dialogue_blank,
     "enemies_none": t_enemies_none,
+    "enemies_amount": t_enemies_amount,
     "enemies_random": t_enemies_random,
     "enemies_swarm": t_enemies_swarm,
     "enemy_difficulty": t_enemy_difficulty,
+    "shops_free": t_shops_free,
+    "shops_crazy": t_shops_crazy,
+    "shops_none": t_shops_none,
 }
 
 # second wave: generated from _SHUFFLE_SPECS so each is a plain (blob, rng) transform
@@ -1594,6 +1858,15 @@ MODES = {
         "options": {"enemy_difficulty": {"level": "easy"}},
         "risk": "low",
     },
+    "oops_all_enemies": {
+        "label": "Oops, All Enemies",
+        "blurb": "Every peaceful placement becomes a hostile creature of equal name length, "
+                 "and the existing monsters are reshuffled for good measure. The people who "
+                 "lived in the world are gone.",
+        "transforms": ["enemies_amount", "enemies_random"],
+        "options": {"enemies_amount": {"amount": "all"}},
+        "risk": "high - quest NPCs and shopkeepers are consumed; quests will not complete",
+    },
     "everything": {
         "label": "Everything",
         "blurb": "All implemented transforms except NPC behaviour, pacing included.",
@@ -1654,6 +1927,28 @@ MODES = {
                  "600 and vice versa.",
         "transforms": ["shop_shuffle"],
         "risk": "low",
+    },
+    "free_shops": {
+        "label": "Free Shops",
+        "blurb": "Every shop price becomes 0, each inside its own field width. Take what you "
+                 "like.",
+        "transforms": ["shops_free"],
+        "risk": "low - prices only, no structure moved",
+    },
+    "crazy_prices": {
+        "label": "Crazy Prices",
+        "blurb": "Every shop price becomes the largest number its own field can hold - 999, "
+                 "9999, 999999 - so nothing is affordable.",
+        "transforms": ["shops_crazy"],
+        "risk": "low - prices only, no structure moved",
+    },
+    "no_shops": {
+        "label": "No Shops",
+        "blurb": "Every shopkeeper's placement is re-pointed at an equal-length non-shopkeeper, "
+                 "so no shop can be reached. The shop definitions themselves are left "
+                 "untouched.",
+        "transforms": ["shops_none"],
+        "risk": "medium - shopkeepers stop existing; quests that need one cannot complete",
     },
     "chest_shuffle": {
         "label": "Chest Shuffle",

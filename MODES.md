@@ -26,7 +26,7 @@ of: **exists** (shipped), **build now** (mechanism known, size-preserving, no un
 |---|---|---|
 | **Ring Hunt** | rename a 13-character `+Event:` flag to `ready_for_end`; `any-ring` = 4 anchors with a ring beside them | **exists** (`ring_hunt`) |
 | **Boss Rush** | bosses are placements carrying `+Boss`; the first version re-points every boss placement's `$Start position` at navpoints inside one arena level, so they stand together | **designed** — needs the boss inventory (blocks with `+Boss`) and the arena's navpoint list. A true gauntlet (arena → arena chaining) rides on the level graph |
-| **Oops All Enemies** | every placement becomes hostile: 2,037 peaceful placements re-pointed at creature names, plus the 2,220 monsters kept and randomised | **build now** — this is `enemies_amount: all` |
+| **Oops All Enemies** | every placement becomes hostile: 2,037 peaceful placements re-pointed at creature names, plus the 2,220 monsters kept and randomised | **built, unverified** — mode `oops_all_enemies`: `enemies_amount` all (1,783 conversions) + `enemies_random` |
 | **Roguelike** | the pressure stack: creature stats, spawns, loot, shops, chests scrambled; XP cut; prices up | **exists** (`roguelike`) |
 | **Item Hunt** | loose pickups re-scattered (`item_scatter`) *and* items moved out of shop stock and quest rewards into containers, so they have to be found | **partially exists** — the scatter half ships; the "out of shops, into chests" half is `chest_items` + shop-stock work |
 | **NPC Hunt** | NPCs stop being where you left them: placement anchors shuffled (`spawn_shuffle`) and identities shuffled (`npc_character_shuffle`), stacked into one mode | **build now** (a mode over two shipped transforms); the stronger version — NPCs relocated across *levels* — is **designed** |
@@ -36,14 +36,14 @@ of: **exists** (shipped), **build now** (mechanism known, size-preserving, no un
 
 | Requested | Mechanism | Status |
 |---|---|---|
-| **How many enemies?** | one dial over one mechanism set: `none` = navpoint-unlink (already proven in game), `few` = unlink a seeded majority, `normal` = untouched, `many` = convert a seeded share of peaceful placements to monsters, `all` = convert all of them | **build now** — `enemies_amount`, subsumes three of the items below |
+| **How many enemies?** | one dial over one mechanism set: `none` = navpoint-unlink (already proven in game), `few` = unlink a seeded majority, `normal` = untouched, `many` = convert a seeded share of peaceful placements to monsters, `all` = convert all of them | **built, unverified** — `enemies_amount` (4,067 / 2,852 / 0 / 872 / 1,783 edits across none / few / normal / many / all); subsumes three of the items below |
 | **Randomized (enemies)?** | swap which creature stands on each placement, and its `+Level:`, between equal-length values | **exists** (`enemies_random`) — needs exposing as a dial rather than a separate mode |
-| **No enemies?** | every monster placement unlinked from its navpoint | **exists and verified in game** (`enemies_none`) — becomes `enemies_amount: none` |
+| **No enemies?** | every monster placement unlinked from its navpoint | **exists and verified in game** (`enemies_none`) — now also `enemies_amount: none`, which reproduces it byte for byte (4,067 edits) |
 | **Chest randomisation** | payouts shuffled (`chest_shuffle`, ships) **and** which *item* a container yields (`+Give` names), between equal-length item names | **half exists** — `chest_items` is **build now** |
 | **Shop randomisation** | every `$Value` price shuffled among equal widths | **exists** (`shop_shuffle`) |
-| **Make it all free** | every `$Value` price → `0`, same field width | **build now** — `shops_free` |
-| **Make it all crazy numbers** | every `$Value` → the largest value its field can hold (`999`, `9999`…) | **build now** — `shops_crazy` |
-| **No shops** | re-point `+Shop`-bearing shopkeeper placements at equal-length non-shopkeepers, so the shop does not exist | **build now** — `shops_none` (needs the shopkeeper list: characters whose definition carries `+Shop`) |
+| **Make it all free** | every `$Value` price → `0`, same field width | **built, unverified** — `shops_free` (477 edits) |
+| **Make it all crazy numbers** | every `$Value` → the largest value its field can hold (`999`, `9999`…) | **built, unverified** — `shops_crazy` (479 edits) |
+| **No shops** | re-point the placements that name a `+Shop` character at equal-length non-shopkeepers, so the shop does not exist | **built, unverified** — `shops_none` (86 placements across 46 shopkeepers); note the marker lives on the character's dialogue definition, not `#Character Info` |
 | **Randomized characters** | shuffle `$Character` values between equal lengths — who stands where | **exists** (`npc_character_shuffle`) |
 | **Randomized rooms** | permute what populates a level *within* the level: shuffle `$Start position` anchors between placements of the same kind in the same level, so rooms are furnished differently while the level graph, doors and quests stay intact. This is the safe half of the design fork in `RESEARCH-ENTRANCE-LOGIC.md` §2 | **build now, first version** — `rooms_shuffle`. The deeper version (a level's whole interior swapped with another's) is **designed** |
 | **Randomized enemy hp and stats** | two levers, both shipped separately: `enemy_difficulty` *scales* hit points/aggression/ranges; `creature_stats_shuffle` *shuffles* speed/weight/attack radius. Requested form = shuffle the hostile `#Character Info` numbers themselves | **build now** — `enemy_stats_random` |
@@ -53,8 +53,8 @@ of: **exists** (shipped), **build now** (mechanism known, size-preserving, no un
 
 Ordered by value ÷ risk, all size-preserving:
 
-1. `enemies_amount` — one dial that covers "how many enemies", "no enemies" and "oops all enemies"
-2. `shops_free`, `shops_crazy`, `shops_none` — three small, self-contained shop levers
+1. `enemies_amount` — one dial that covers "how many enemies", "no enemies" and "oops all enemies" — **done**
+2. `shops_free`, `shops_crazy`, `shops_none` — three small, self-contained shop levers — **done**
 3. `chest_items` — real chest randomisation instead of payout shuffling
 4. `player_stats_random`, `enemy_stats_random` — the two stats items
 5. `rooms_shuffle` — the safe half of the room idea
@@ -63,7 +63,7 @@ Ordered by value ÷ risk, all size-preserving:
 
 ---
 
-## Modes (29)
+## Modes (33)
 
 | Mode | What it changes | Tx | Risk |
 |---|---|---|---|
@@ -71,6 +71,9 @@ Ordered by value ÷ risk, all size-preserving:
 | **Door Shuffle** | door locks, names, sounds — **not** destinations; see the note below | 3 | low |
 | **Item Scatter** | which item sits at which pickup | 1 | low |
 | **Shop Shuffle** | every shop price | 1 | low |
+| **Free Shops** | every shop price → `0`, same field width | 1 | low |
+| **Crazy Prices** | every shop price → the largest value its field holds | 1 | low |
+| **No Shops** | shopkeeper placements re-pointed so no shop can be reached | 1 | medium |
 | **Chest Shuffle** | container payouts | 1 | low |
 | **Dialogue Chaos** | NPCs say each other's lines | 1 | low |
 | **Sound Chaos** | every sound effect and music cue | 2 | low |
@@ -88,6 +91,7 @@ Ordered by value ÷ risk, all size-preserving:
 | **No Enemies** | **every monster spawn unlinked from its navpoint; hostile definitions re-teamed** | 1 | medium |
 | **Enemy Swarm** | **peaceful placements become monsters, then the monsters are reshuffled** | 2 | **high** |
 | **Enemy Difficulty** (Easy / Impossible) | **hostile creature stats and placement levels scaled** | 1 | low / high |
+| **Oops, All Enemies** | **every peaceful placement becomes a hostile creature, then the monsters are reshuffled** | 2 | **high** |
 | **Roguelike** | the full pressure stack — creatures, spawns, loot, shops, XP, prices | 12 | high |
 | **Roguelike · Short** | Roguelike with the length taken out | 12 | high |
 | **Hardcore** | **Roguelike + permadeath — death sticks** | 13 | very high |
@@ -226,7 +230,7 @@ reversible, untested in game — treat Hardcore as the boldest mode in the list.
 
 ---
 
-## Transforms (33)
+## Transforms (41)
 
 Edit counts are for one sample seed on the Summoner 1 corpus; shuffle counts move by a
 handful seed to seed. The two dials (`xp_scale`, `levelcap_set`) read 0 at their neutral
@@ -243,10 +247,18 @@ handful seed to seed. The two dials (`xp_scale`, `levelcap_set`) read 0 at their
 | `animation_shuffle` | `$Animation`, `+Animation class` | 2,134 |
 | `sound_shuffle` | every `.wav` ref | 1,706 |
 | `creature_stats_shuffle` | speed, weight, HP, damage, protection, aggression, detection, turn rates | 1,284 |
+| `enemies_none` | every monster placement unlinked from its navpoint (verified in game) | 4,067 |
+| `enemies_amount` | the enemy-count dial — none / few / normal / many / all | 0–4,067 |
+| `enemies_random` | which creature stands on each monster placement, `+Level:` | 1,697 |
+| `enemies_swarm` | peaceful placements re-pointed at hostile creatures | 1,783 |
+| `enemy_difficulty` | hostile stats + placement levels scaled | 803 |
 | `music_shuffle` | `$Soundtrack`, `$Sound` | 1,108 |
 | `economy_squeeze` | `$Value` prices up, `+AdjustGP` rewards down | 534 |
 | `icon_shuffle` | `$Icon`, `.vbm` | 481 |
 | `shop_shuffle` | `$Value` prices | 328 |
+| `shops_free` | every `$Value` price → `0` | 477 |
+| `shops_crazy` | every `$Value` price → all-9s at its own width | 479 |
+| `shops_none` | shopkeeper placements re-pointed at non-shopkeepers | 86 |
 | `xp_nerf` | `+AddXP` rewards cut to a third | 247 |
 | `door_name_shuffle` | `$Door` names | 254 |
 | `vfx_shuffle` | `.vfx` | 357 |
@@ -306,4 +318,4 @@ the loader but must not move.
 Every transform is therefore **length-neutral**: values are swapped only between equal-width
 fields, and flags renamed only with same-length strings. Nothing is inserted or deleted.
 
-Verified across all 33: **zero size violations.**
+Verified across all 41: **zero size violations.**

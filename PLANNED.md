@@ -22,7 +22,7 @@ verified in game by the headless rig. Anything that cannot be verified in game s
 
 ## 1. NEXT — in order
 
-### 1.1 `enemies_amount` — one dial for how many enemies
+### 1.1 `enemies_amount` — one dial for how many enemies — **DONE**
 **Requested as:** "How many enemies?", "No enemies?", "Oops all enemies".
 **Mechanism:** `none` = navpoint-unlink every monster placement (already proven in game);
 `few` = unlink a seeded majority; `normal` = untouched; `many` = convert a seeded share of the
@@ -31,8 +31,15 @@ peaceful placements to monsters; `all` = convert every one of them.
 transforms would drift apart.
 **Acceptance:** five option values produce five distinguishable edit counts; `none` matches the
 shipped `enemies_none` behaviour exactly (4,067 edits on the retail disc).
+**Built 2026-09-21 — measured on the retail stream, all five size-preserving:** `none` **4,067
+edits / 12,201 bytes** (byte-identical output to the verified `enemies_none(how="navpoint")`),
+`few` **2,852 / 8,556** (a seeded ~70%, 1,554 of 2,220 placements), `normal` **0 / 0** (vanilla by
+design, reported), `many` **872 / 11,314** (1,018 of 2,037 targeted, 134 skipped), `all` **1,783 /
+23,280** (every convertible placement; 234 skipped — no hostile name of that length). An unknown
+value is refused with nothing changed. Shipped as transform `enemies_amount` (option `amount`) and
+mode `oops_all_enemies` (`all` + `enemies_random`). See `FEATURES.md` §2.
 
-### 1.2 `shops_free`, `shops_crazy`, `shops_none` — the shop levers
+### 1.2 `shops_free`, `shops_crazy`, `shops_none` — the shop levers — **DONE**
 **Requested as:** "Make it all free", "Make it all crazy numbers", "No Shops".
 **Mechanism:** rewrite every `$Value` price to `0`; rewrite it to the largest value its field
 holds (`999`, `9999`…); and for "no shops" re-point the placements of shopkeepers — characters
@@ -40,6 +47,22 @@ whose definition carries `+Shop` — at equal-length non-shopkeepers, so the sho
 **Queued before:** gather the shopkeeper list (which `$Character` definitions carry `+Shop`).
 **Acceptance:** prices are all zero / all maximal with the field width preserved; no `+Shop`
 character is reachable in the world afterwards.
+**Built 2026-09-21 — measured on the retail stream, all three size-preserving:** `shops_free`
+**477 edits / 530 bytes** (479 `$Value` prices → `0`, each padded to its own field width; 2 were
+already 0), `shops_crazy` **479 / 1,728** (every `$Value` → all-9s at its own width, `999`…
+`999999`), `shops_none` **86 / 1,132**.
+
+**The `+Shop` marker lives on the dialogue definition, not `#Character Info` (found while
+building):** in the retail stream the bare `+Shop` flag is a *topic* on the character's
+dialogue block — keyed by `$Character: "Name"`, e.g. `$Character: "Shopkeeper#general"` →
+`+Topic: {"Hail"}` → `+Shop` — and **0** `#Character Info` stat blocks carry it. So the
+shopkeeper set is the 46 character names whose dialogue definition carries `+Shop`. A shop is
+resolved by name (`level_script_get_shopkeeper_info(char *)`), and a placement reaches it through
+its `$Name:` (which equals the definition key), so `shops_none` re-points each of the **86**
+placements that name a shopkeeper at an equal-length non-shopkeeper placement name. Every length
+class had candidates, so nothing was skipped; the definitions are never touched. Shipped as
+transforms `shops_free`, `shops_crazy`, `shops_none` and modes `free_shops`,
+`crazy_prices`, `no_shops`. See `FEATURES.md` §1.
 
 ### 1.3 `chest_items` — randomise what a chest *yields*
 **Requested as:** "Chest Randomization" (the real version).

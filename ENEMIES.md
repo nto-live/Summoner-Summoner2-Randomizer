@@ -143,12 +143,15 @@ dice roll.
 | Mode | Transforms | Risk |
 |---|---|---|
 | **No Enemies** | `enemies_none` | medium — the disarm is not yet verified in game |
+| **Oops, All Enemies** | `enemies_amount` (all), `enemies_random` | high — quest NPCs are consumed |
 | **Enemy Swarm** | `enemies_swarm`, `enemies_random` | high — quest NPCs are consumed |
 | **Impossible Enemies** | `enemy_difficulty` (999%) | high — untested, possibly unwinnable by design |
 | **Easy Enemies** | `enemy_difficulty` (50%) | low |
 
 Options: `enemy_difficulty.level` (the dial), `enemy_difficulty.level_shift` (flat levels),
-`enemies_none.how` (navpoint / team / both).
+`enemies_none.how` (navpoint / team / both), `enemies_amount.amount` (none / few / normal /
+many / all — one dial over the enemy count, measured 4,067 / 2,852 / 0 / 872 / 1,783 edits;
+`none` reproduces the verified `enemies_none` byte for byte).
 
 ---
 

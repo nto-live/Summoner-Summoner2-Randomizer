@@ -5,7 +5,7 @@ run against the retail `TABLES.VPP` stream (6,771,975 bytes) with a fixed seed, 
 byte counts are what it actually did. Regenerate with `inventory.py`; do not hand-edit the
 numbers.*
 
-**Counts:** 37 transforms · 29 modes · 6 option-bearing transforms · 7 blocked items.
+**Counts:** 41 transforms · 33 modes · 7 option-bearing transforms · 7 blocked items.
 
 Status vocabulary, and it is used strictly:
 
@@ -58,6 +58,9 @@ uses a dial must set a value, and mode values are defaults, not overrides.**
 | `model_ref_shuffle` | 2,380 | 26,130 | built, unverified | 2,426 `.mvf` model refs |
 | `item_scatter` | 155 | 1,944 | built, unverified | which item sits at which loose pickup (177 `$Item`) |
 | `shop_shuffle` | 348 | 423 | built, unverified | 479 `$Value` prices |
+| `shops_free` | 477 | 530 | built, unverified | every `$Value` price → `0`, padded to the field's own width (2 were already 0) |
+| `shops_crazy` | 479 | 1,728 | built, unverified | every `$Value` → all-9s at the field's own width (`999`, `9999`, `999999`) |
+| `shops_none` | 86 | 1,132 | built, unverified | 86 placements naming one of the 46 `+Shop` characters re-pointed at an equal-length non-shopkeeper; the definitions are never touched |
 | `chest_shuffle` | 23 | 24 | built, unverified | weak by nature: most single-digit `+Give` values are item counts |
 | `spawn_shuffle` | 4,467 | 9,737 | built, unverified | 4,594 `$Start position` anchors — relocates who stands where |
 | `material_shuffle` | 76 | 272 | built, unverified | 337 `$Material`, 5 length classes |
@@ -78,8 +81,21 @@ uses a dial must set a value, and mode values are defaults, not overrides.**
 | Transform | Edits | Bytes | Status | Notes |
 |---|---:|---:|---|---|
 | `enemies_none` | 4,067 | 12,201 | **verified in game** | all 2,220 monster placements unlinked from their navpoints; control run: Liangshan 100→17, sewer 65→12 (`ENEMIES.md` §4) |
+| `enemies_amount` | 4,067 | 12,201 | built, unverified | the enemy-count dial (`none/few/normal/many/all`); value `none` reproduces the verified `enemies_none` byte for byte. Measured at every value below |
 | `enemy_difficulty` | 803 | 1,685 | built, unverified | 51 hostile stat sheets + 293 placement levels; dial `trivial/easy/normal/hard/brutal/deadly/impossible` |
 | `creature_stats_shuffle` | 1,285 | 1,781 | built, unverified | 337 `$Speed`, 337 `$Weight`, 306 `$Attack Radius` |
+
+**`enemies_amount` — measured at every value** (retail stream, seed `4242`; every value size-preserving):
+
+| `amount` | edits | bytes | what it does |
+|---|---:|---:|---|
+| `none` | 4,067 | 12,201 | unlink all 2,220 monster placements from their navpoints — identical output to the verified `enemies_none(how="navpoint")` |
+| `few` | 2,852 | 8,556 | unlink a seeded ~70% (1,554) of the monster placements |
+| `normal` | 0 | 0 | vanilla, by design; the report says so |
+| `many` | 872 | 11,314 | 1,018 of the 2,037 peaceful placements targeted, 872 converted to an equal-length monster, 134 skipped |
+| `all` | 1,783 | 23,280 | every convertible peaceful placement converted (same as `enemies_swarm`); 234 skipped — no hostile name of their length |
+
+An unknown `amount` is refused: 0 edits, nothing changed, and a note saying so.
 
 ## 3. Progression — how the game ends, and how fast you get there
 
@@ -105,7 +121,7 @@ uses a dial must set a value, and mode values are defaults, not overrides.**
 | `door_name_shuffle` | 260 | 2,014 | built, unverified | 292 `$Door` names — cosmetic, **not** destinations |
 | `door_sound_shuffle` | 109 | 1,134 | built, unverified | 256 door sounds |
 
-## 5. Modes (29)
+## 5. Modes (33)
 
 Every mode is a named preset over the transforms above. Risk is the honest reading of what it
 does, not a promise.
@@ -119,6 +135,7 @@ does, not a promise.
 | Short Run | `short` | 2 | — | unverified |
 | One Hour | `one_hour` | 3 | — | unverified |
 | **Enemy Swarm** | `invasion` | 2 | — | unverified, high risk |
+| **Oops, All Enemies** | `oops_all_enemies` | 2 | amount=all | built, unverified — quest NPCs consumed |
 | **Impossible Enemies** | `impossible` | 1 | level=impossible | fixed today; unverified |
 | **Easy Enemies** | `easy_enemies` | 1 | level=easy | fixed today; unverified |
 | Everything | `everything` | 24 | — | unverified |
@@ -128,6 +145,9 @@ does, not a promise.
 | **Progression** | `progression` | 2 | 200% / 200% | fixed today; unverified |
 | Item Scatter | `item_scatter` | 1 | — | unverified |
 | Shop Shuffle | `shop_shuffle` | 1 | — | unverified |
+| Free Shops | `free_shops` | 1 | — | unverified |
+| Crazy Prices | `crazy_prices` | 1 | — | unverified |
+| No Shops | `no_shops` | 1 | — | unverified — shopkeepers stop existing |
 | Chest Shuffle | `chest_shuffle` | 1 | — | unverified |
 | Dialogue Chaos | `dialogue_chaos` | 1 | — | unverified |
 | Sound Chaos | `sound_chaos` | 2 | — | unverified |
@@ -142,13 +162,14 @@ does, not a promise.
 | Hardcore | `hardcore` | 13 | — | unverified |
 | Endgame Gate (binary) | `endgame_gate` | 0 (+1 word) | stage=5 | **verified in game** |
 
-## 6. Options (6 option-bearing transforms)
+## 6. Options (7 option-bearing transforms)
 
 | Transform | Option | Values | Default |
 |---|---|---|---|
 | `enemy_difficulty` | `level` | trivial · easy · normal · hard · brutal · deadly · impossible | normal |
 | `enemy_difficulty` | `level_shift` | −20…+20 creature levels | 0 |
 | `enemies_none` | `how` | navpoint · both · team *(blocked)* | navpoint |
+| `enemies_amount` | `amount` | none · few · normal · many · all | normal |
 | `ring_hunt` | `anchor` | any-ring · safe · 11 named flags | seeded pick |
 | `ring_hunt` | `count`, `safe_only` | 1…11 anchors, flag | 1, true |
 | `xp_scale` | `percent` | 5…999 | 100 |
@@ -192,13 +213,13 @@ shops / randomised characters / randomised rooms / randomised enemy hp and stats
 player stats.*
 
 Each one is mapped to its mechanism and its honest state in **`MODES.md` → "Requested — the
-owner's list, organised"**. Summary: **three already exist** (Ring Hunt, Roguelike, shop
-randomisation — plus randomised characters and no-enemies as shipped transforms), **seven build
-now** with no unknowns (`enemies_amount` as one dial over the enemy count, `shops_free`,
-`shops_crazy`, `shops_none`, `chest_items`, `player_stats_random`, `enemy_stats_random`,
-`rooms_shuffle`), **two are designed** and need an inventory first (Boss Rush, NPC Hunt's
-cross-level version), and **one is blocked with a reason** (Collectionthon — the game has no
-collection counter; the two candidate mechanisms are written down instead of hand-waved).
+owner's list, organised"**. The work order below is mostly built now:
+
+* **Built (unverified)** — `enemies_amount` (4,067 at `none` / 2,852 at `few` / 0 at `normal` / 872 at `many` / 1,783 at `all`), `shops_free` (477), `shops_crazy` (479), `shops_none` (86). These are in the measured
+  catalogue above; none is verified in game yet.
+* **Still to build** — `chest_items`, `player_stats_random`, `enemy_stats_random`, `rooms_shuffle`
+  (all mechanism-known), plus **Boss Rush / NPC Hunt (cross-level)** which need an inventory first,
+  and **Collectionthon** which stays blocked with its reason (the game has no collection counter).
 
 Work order, value ÷ risk: `enemies_amount` → the three shop levers → `chest_items` → the two stat
 transforms → `rooms_shuffle` → Boss Rush → Collectionthon.
