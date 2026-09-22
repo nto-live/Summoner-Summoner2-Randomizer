@@ -94,7 +94,7 @@ still exists.
 
 ## 2. QUEUED — decided, mechanism known
 
-### 2.1 Door destination remap **inside the engine** *(the headline feature)*
+### 2.1 Door destination remap **inside the engine** *(the headline feature)* — **DONE**
 Proven in game on 2026-09-21, but it lives in lab scripts (`make_door_test_iso.py`,
 `apply_door_remap.py`); `cli.py` cannot remap a destination. Make it a seed-driven transform with
 the constraints *enforced and refused*, never guessed:
@@ -107,10 +107,51 @@ reference implementation `apply_door_remap.py`.
 **Acceptance:** a seeded remap reproduces the A/B that already passes for the lab script
 (`DOOR-REMAP.md` §4.5).
 
-### 2.2 `DATA_PATCHES` — a byte-range patch class in the engine
-Required by 2.1: the current `binary.py` registry patches one 4-byte word at one virtual address.
-A `TABLES.VPP` range is a different class of edit. Same two non-negotiables (declare-and-refuse,
-read-back) plus bounds-checking against the archive region and a clean whole-image diff.
+**Built 2026-09-21** as the transform `door_destination_remap` and the mode `door_remap` (label
+"Door Remap"). It finds the doors by *parsing* the stream — a `$Trigger: "<name>"` whose block's
+`+Id:` is `"load level"` — not from a precomputed table, and **all 218 were found**, with the
+discovered offsets agreeing exactly with `door-triggers.json`: all 218 ISO offsets, all 218
+destinations and all 218 source-level attributions are identical to the fixture.
+
+**Measured — seed `DOOR1`, retail disc, dry run and a real build:** 218 doors found, **200
+destinations rewritten**, 18 landed on the name they already had, **0 skipped**, **1,568 bytes
+changed**, image length identical (1,232,699,392 → 1,232,699,392), and a whole-image diff of
+**0 bytes outside `TABLES.VPP`** — the first differing byte is `0x49641941`, the first door's own
+name field. Every patch declared the bytes it expected, was read back, and the stream diff was
+proven to contain nothing outside the declared fields. `how` policy option
+(`shuffle` / `swap` / `off`) ships with a label and help text.
+
+**Four of the five designed constraints are enforced and refused** — real `Level_info` name;
+`len(new) <= len(old)`; never the door's own source level; never the `$zzz` sentinel — and a door
+with no legal target is left alone and counted as a skip. The two softer ones added during
+research (`+Index:` navpoint existence in the destination, and the `+Script:` rule) are **not**
+enforced; that is the honest gap, and it is exactly what the parent's in-game A/B has to answer.
+
+**`inventory.py` cannot see this.** Its fixture `F:\rando\S1\notes\_end_blob.bin` was built with
+the pre-fix offset rule and contains 1 of the 218 doors, so it reports `1 edit / 10 bytes`.
+Regenerating that fixture is a lab decision, not taken here; the disc numbers above are the ones
+the feature actually produces, and `cli.py --build … --dry-run` reproduces them.
+
+**Not needed after all:** the `DATA_PATCHES` registry of §2.2 — see there.
+
+**Prerequisite bug this uncovered (fixed in the same commit):** the engine read every
+`TABLES.VPP` entry from the wrong offset. The data area starts at the next `0x800` boundary after
+the table of contents (`0x9000` for 527 records), not at a fixed `0x1000`, and entries are
+`0x800`-aligned. The old rule truncated the archive's last ~620 KB — which is where all 52 level
+files, and therefore all 218 doors and 59 `#Character Info` blocks, live. Blob length is
+unchanged; nine other transforms' *disc* behaviour changes with it (their fixture numbers do not;
+the list is in `FEATURES.md` §0).
+
+### 2.2 `DATA_PATCHES` — a byte-range patch class in the engine — **DONE (not needed)**
+**Resolved 2026-09-21.** No new patch class was required, and none was added. The engine already
+returns a modified blob and writes each entry's slice back to its own ISO range
+(`randomize_iso`), and once the archive-layout bug above was fixed the door streams are *inside*
+that blob — so the doors are ordinary blob transforms like every other one, and the discipline
+was carried inside the transform instead (declare-and-refuse on the bytes it expects, read every
+patch back, bounds-check against the stream, and prove the whole-stream diff contains nothing
+outside the declared fields). A `DATA_PATCHES` registry would have been invented machinery for a
+problem that does not exist. `DOOR-REMAP.md` §6.1's `binary.py` sibling is therefore closed
+unbuilt, deliberately.
 
 ### 2.3 Boss Rush
 **Requested as:** "Boss Rush".

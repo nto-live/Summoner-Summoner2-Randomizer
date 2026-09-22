@@ -290,6 +290,16 @@ clean whole-image diff** — changed bytes must be a subset of the fields we dec
 script. Folding it into `rando_core.py` as a real transform — with the seed driving the mapping —
 is the work item.
 
+> **CLOSED 2026-09-21 — and the sibling turned out not to be needed.** The transform exists:
+> `door_destination_remap` in `rando_core.py`, mode `door_remap`, all 218 doors found by parsing
+> the stream, constraints enforced and refused, the discipline carried inside the transform
+> (declare-and-refuse, read back, bounds check, and a whole-stream diff that must contain nothing
+> outside the declared fields). No `DATA_PATCHES` class was added: the engine already writes each
+> entry's slice back to its own ISO range, so a door is an ordinary transform on the reassembled
+> blob. Folding it in also uncovered the reason the lab had to work outside the engine — the
+> archive's data area starts at the next `0x800` boundary after the TOC (`0x9000` for 527
+> entries), not at a fixed `0x1000`, and entries are `0x800`-aligned. See `FEATURES.md` §0.
+
 ### 6.2 Then `--patch-only` output
 
 Emit a small patch file instead of a 1.2 GB ISO copy. Two wins: seeds become tiny and shareable

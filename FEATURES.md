@@ -1,11 +1,12 @@
 # Features and Options — the authoritative list
 
 *Generated 2026-09-21 from the engine's own registry, then measured: every transform below was
-run against the retail `TABLES.VPP` stream (6,771,975 bytes) with a fixed seed, and the edit and
-byte counts are what it actually did. Regenerate with `inventory.py`; do not hand-edit the
-numbers.*
+run against the extracted `TABLES.VPP` stream (`F:\rando\S1\notes\_end_blob.bin`, 6,771,975
+bytes) with a fixed seed, and the edit and byte counts are what it actually did. Regenerate with
+`inventory.py`; do not hand-edit the numbers. One row is the exception and says so: the door
+remap's fixture still holds the pre-fix stream, so its numbers come from the disc instead (§0).*
 
-**Counts:** 41 transforms · 33 modes · 7 option-bearing transforms · 7 blocked items.
+**Counts:** 42 transforms · 34 modes · 8 option-bearing transforms · 6 blocked items.
 
 Status vocabulary, and it is used strictly:
 
@@ -23,15 +24,40 @@ boundary is refused rather than done.
 
 ## 0. Where the features actually live — read this first
 
-**The door destination remap is not in the engine.** It is the headline feature, it is proven in
-game (see `DOOR-REMAP.md` §4.5), and it is currently a *lab script*: `make_door_test_iso.py` /
-`apply_door_remap.py` write `$Trigger:` names into a copy of the disc. The engine's `doors` mode
-shuffles `$Door` names, locks and sounds — cosmetics — and nothing in `cli.py` can remap a door
-destination.
+**The door destination remap is in the engine now** (2026-09-21). It was the headline feature, it
+was proven in game as a lab script (`DOOR-REMAP.md` §4.5), and it is now the transform
+`door_destination_remap` with the mode `door_remap`: it finds every door by *parsing* the level
+tables, rewrites only destination names that fit their own field, refuses rather than guesses,
+and carries the lab applier's discipline (declare-and-refuse, read back, bounds check, and a
+whole-stream diff that must contain nothing outside the declared fields). The engine's `doors`
+mode is untouched and still means exactly what it says: door *locks, names and sounds*.
 
-That is the top item of work, and the blocked list was lying about it: `PENDING["door_destination_swap"]`
-still claims *"Door destinations are not in TABLES.VPP"*, which is exactly the conclusion that
-was overturned on 2026-09-20. The entry needs to go, and the transform needs to exist.
+`PENDING["door_destination_swap"]` claimed *"Door destinations are not in TABLES.VPP"*, which was
+overturned on 2026-09-20. The entry is gone.
+
+### The archive-layout bug this work uncovered
+
+Every `TABLES.VPP` entry was being read from the wrong offset. The engine assumed the data area
+starts at `0x1000`; it actually starts at the next `0x800` boundary after the table of contents
+(`0x9000` for 527 records), and the entries are `0x800`-aligned inside the archive. Reading from
+`0x1000` shifted every entry by 32 KB and truncated the archive's last ~620 KB — which is exactly
+where all 52 level files live, and therefore where **all 218 door triggers** and 59 of the 160
+`#Character Info` blocks live. Before the fix the reassembled stream contained **1** door; after
+it, **218**. The rule is verified against the disc: with it, every entry's padding is clean zeros
+and the last entry ends exactly at the declared archive size, for all nine archives in the image.
+The blob's length is unchanged (6,771,975 bytes) — only the byte ranges each entry is read from.
+
+**Nine other transforms move counts because of it** — `animation_shuffle`, `creature_stats_shuffle`,
+`enemies_swarm`, `model_ref_shuffle`, `music_shuffle`, `npc_character_shuffle`, `permadeath`,
+`sound_shuffle`, `vfx_shuffle`. They were editing a stream that was missing the level files.
+Everything else, including the in-game-verified `enemies_none` (4,067 edits), is byte-identical.
+
+**Fixture caveat, stated plainly.** `inventory.py` measures against
+`F:\rando\S1\notes\_end_blob.bin`, which was built with the old offset rule and still holds the
+pre-fix stream. It therefore sees **1** of the 218 doors, and it is the source of every number in
+this file. The door row below carries the disc-measured numbers *as well*, because the fixture
+cannot see them; every other row is inventory's number, unchanged and still reproducible against
+that fixture.
 
 ### Three bugs the inventory found, all fixed and re-measured
 
@@ -52,6 +78,7 @@ uses a dial must set a value, and mode values are defaults, not overrides.**
 
 | Transform | Edits | Bytes | Status | Notes |
 |---|---:|---:|---|---|
+| `door_destination_remap` | 200 | 1,568 | built, unverified in game | **the headline feature.** All **218** doors found by parsing the stream; 200 destinations rewritten at seed `DOOR1`, 18 landed on the name they already had, 0 skipped. Every field is `len(old)+1` bytes in and out. Measured against the disc, not the fixture — see §0 |
 | `npc_character_shuffle` | 5,588 | 60,659 | built, unverified | 6,256 `$Character` values across 25 length classes — who stands where |
 | `enemies_swarm` | 1,783 | 23,280 | built, unverified | 1,783 peaceful placements re-pointed at hostile creatures; 234 skipped (no same-length name). Eats quest NPCs — chaos tier |
 | `enemies_random` | 1,697 | 14,277 | built, unverified | swaps which creature stands on each of 2,220 placements + shuffles `+Level:` |
@@ -121,7 +148,7 @@ An unknown `amount` is refused: 0 edits, nothing changed, and a note saying so.
 | `door_name_shuffle` | 260 | 2,014 | built, unverified | 292 `$Door` names — cosmetic, **not** destinations |
 | `door_sound_shuffle` | 109 | 1,134 | built, unverified | 256 door sounds |
 
-## 5. Modes (33)
+## 5. Modes (34)
 
 Every mode is a named preset over the transforms above. Risk is the honest reading of what it
 does, not a promise.
@@ -130,7 +157,8 @@ does, not a promise.
 |---|---|---:|---|---|
 | Vanilla | `vanilla` | 0 | — | baseline |
 | **No Enemies** | `peaceful` | 1 | how=navpoint | **verified in game** |
-| Door Shuffle | `doors` | 3 | — | cosmetics only — *the name overpromises until the remap lands* |
+| Door Shuffle | `doors` | 3 | — | cosmetics only: door locks, names and sounds, *never* where a door leads |
+| **Door Remap** | `door_remap` | 1 | how=shuffle | **built, unverified in game** — rewrites where all 218 doors lead; changes the level graph |
 | Chaos | `chaos` | 5 | — | unverified |
 | Short Run | `short` | 2 | — | unverified |
 | One Hour | `one_hour` | 3 | — | unverified |
@@ -162,10 +190,11 @@ does, not a promise.
 | Hardcore | `hardcore` | 13 | — | unverified |
 | Endgame Gate (binary) | `endgame_gate` | 0 (+1 word) | stage=5 | **verified in game** |
 
-## 6. Options (7 option-bearing transforms)
+## 6. Options (8 option-bearing transforms)
 
 | Transform | Option | Values | Default |
 |---|---|---|---|
+| `door_destination_remap` | `how` | shuffle · swap · off | shuffle |
 | `enemy_difficulty` | `level` | trivial · easy · normal · hard · brutal · deadly · impossible | normal |
 | `enemy_difficulty` | `level_shift` | −20…+20 creature levels | 0 |
 | `enemies_none` | `how` | navpoint · both · team *(blocked)* | navpoint |
@@ -186,15 +215,17 @@ does, not a promise.
 | Level order | the runtime level-id → name table |
 | One Hour (true version) | a flag graph + reachability solver |
 | Character models | `.mvf` format |
-| **Door destination remap** | *nothing — this is implementable now and is next* |
+
+*(`Door destination remap` used to be listed here, blocked on "nothing". It is built — see §0.)*
 
 ## 8. The test plan this catalogue sets up
 
 Every row above is a checklist item. The testing phase runs down it and moves rows from **built,
 unverified** to **verified in game** — or files what broke. Highest value first:
 
-1. **Door destination remap in the engine** — implement, then re-run the A/B that already passes
-   for the lab script (`DOOR-REMAP.md` §4.5).
+1. **Door Remap, in game** — the transform is built and measured (200 destinations at seed
+   `DOOR1`, 1,568 bytes, byte-identical image length, nothing changed outside `TABLES.VPP`); the
+   A/B that already passes for the lab script (`DOOR-REMAP.md` §4.5) is the verification step.
 2. **Ring Hunt** — does the ending really open at the renamed flag.
 3. **Enemy Swarm, Enemy Difficulty** — the dial's effect on a fight; swarm's effect on quests.
 4. **Progression dials** — XP at 200%, caps, permadeath.

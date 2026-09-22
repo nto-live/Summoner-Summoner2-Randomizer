@@ -8,9 +8,20 @@ region (~7 MB).
 Facts this relies on (see notes/summoner-findings.md):
   * Every .VPP starts with magic 0x51890ACE. Layout: 16-byte header, zero pad to
     0x800, then count x 64-byte records (name[48], 3 reserved u32, u32 size),
-    then entry data at 0x1000, packed sequentially with no padding.
+    then entry data, packed sequentially with no padding between entries.
+  * The data area does NOT start at a fixed 0x1000: it starts at the next 0x800
+    boundary after the table of contents, and the TOC is count*64 bytes. For
+    TABLES.VPP that is 527 records ending at 0x8BC0, so its data starts at 0x9000 -
+    not 0x1000. Reading from 0x1000 shifted every entry in the archive by 32 KB and
+    truncated the tail, which is where the 52 level files (and all 218 door
+    triggers) live. Verified against the disc: with the rule below every entry's
+    padding is clean zeros and the last entry ends exactly at the declared archive
+    size, for all nine archives in the image.
   * TABLES.VPP entries are arbitrary slices of one continuous text stream, so all
     transforms operate on the reassembled blob and MUST be size-preserving.
+  * Entry boundaries are 0x800-aligned in the file but the blob is the *tight*
+    concatenation of the slices, so a transform never sees the padding and nothing
+    has to be aware of it - only the per-entry offsets do.
 """
 from __future__ import annotations
 
@@ -32,9 +43,24 @@ except ImportError:  # keeps the table layer usable on its own
     _HAVE_BINARY = False
 
 VPP_MAGIC = 0x51890ACE
-HEADER_PAD = 0x800
+HEADER_PAD = 0x800       # the table of contents starts here
 REC_SIZE = 64
-DATA_START = 0x1000
+ENTRY_ALIGN = 0x800      # entry data is 0x800-aligned inside the archive
+
+
+def _align_up(value: int, align: int = ENTRY_ALIGN) -> int:
+    return (value + align - 1) & ~(align - 1)
+
+
+def data_start(count: int) -> int:
+    """Where the first entry begins: after the TOC, on the next 0x800 boundary.
+
+    Not a constant. A fixed 0x1000 is only right while the TOC fits below it, and for
+    TABLES.VPP's 527 records it does not - the TOC runs to 0x8BC0 and the real data
+    starts at 0x9000. Assuming 0x1000 mis-reads every entry in the archive and loses
+    the last ~620 KB of it.
+    """
+    return _align_up(HEADER_PAD + count * REC_SIZE)
 
 
 # --------------------------------------------------------------------------- #
@@ -44,7 +70,7 @@ DATA_START = 0x1000
 class VppEntry:
     name: str
     size: int
-    offset: int          # relative to data start
+    offset: int          # relative to the archive base
 
 
 class VppFile:
@@ -59,13 +85,14 @@ class VppFile:
         fh.seek(base + HEADER_PAD)
         toc = fh.read(self.count * REC_SIZE)
         self.entries: list[VppEntry] = []
-        off = DATA_START
+        self.data_start = data_start(self.count)
+        off = self.data_start
         for i in range(self.count):
             raw = toc[i * REC_SIZE:(i + 1) * REC_SIZE]
             name = raw[:48].split(b"\x00")[0].decode("latin-1")
             size = struct.unpack_from("<I", raw, 60)[0]
             self.entries.append(VppEntry(name, size, off))
-            off += size
+            off = _align_up(off + size)
 
     def blob(self) -> bytes:
         out = bytearray()
@@ -178,7 +205,7 @@ def pick_tables(fh, bases) -> tuple[int, VppFile] | tuple[None, None]:
             continue
         if v.count == 527:
             return b, v
-        fh.seek(b + DATA_START)
+        fh.seek(b + v.data_start)
         sample = fh.read(512)
         if b"$Door" in sample or b"#Doors" in sample or b"$Level" in sample:
             return b, v
@@ -1448,6 +1475,296 @@ def t_enemy_difficulty(blob, rng, level="normal", level_shift=0):
     return bytes(out), rep
 
 
+# --------------------------------------------------------------------------- #
+# Doors - where a door LEADS, which is a name in the level's own `.tbl`
+#
+# A door is one entry of a level file's `#Triggers` block:
+#
+#   //-------------
+#   #Triggers
+#   //-------------
+#
+#   $Trigger: "catacombs"          <- THE DESTINATION LEVEL NAME (inline, fixed width)
+#       +Id: "load level"          <- this is what makes it a door and not an animation cue
+#       +Index: 1                  <- player start id used at the destination
+#       +Type: "spline"
+#       +Spline name: "$loadarea01"
+#
+# `level_script_check_level_load` (0x002023C0) copies the trigger's name straight into
+# `Level_data.name`, and the engine then builds `<name>.s3d` / `<name>.p3d` / `<name>_script.tbl`
+# from it. The name IS the destination, so rewriting that one quoted string redirects a door:
+# no binary patch, no new bytes, fully reversible. Proven end to end - a rewritten door was
+# watched loading a different level - in `DOOR-REMAP.md` sections 3, 4 and 4.5.
+#
+# 218 of them exist on the retail disc, spread over the 52 level files. A `$Trigger:` in a
+# *character* `.tbl` is animation timing and carries no `+Id:` - hence the two-part rule below.
+# --------------------------------------------------------------------------- #
+DOOR_TRIGGER_RE = re.compile(rb'\$Trigger:\s*"([^"\r\n]{1,40})"')
+DOOR_ID_RE = re.compile(rb'\+Id:\s*"([^"]{0,40})"')
+DOOR_LEVEL_RE = re.compile(rb"Level file for ([^\r\n*]+)")
+DOOR_BLOCK_WINDOW = 400
+
+# Every name the game can resolve to a level index: the 51 `Level_info` names from the
+# executable's level-name table (`0x1213E68`, stride 0x3C). `level_script_get_level_index`
+# looks a name up in that table with a case-insensitive linear search and returns -1 for an
+# unknown name, which the loader then uses as an index - so this table *is* the list of legal
+# destinations. Metadata only: the names, never the levels.
+DOOR_TARGET_NAMES = (
+    "Wolong", "Catacombs", "test", "masad", "worldmap1", "lenele1b", "lenele1c", "lenele1d",
+    "lenele1e", "sewer", "rand-hills01", "IkaemosBottomInt", "IkaemosTopInt", "IkaemosExt",
+    "KhosaniLab", "IonaExt", "WolongCaverns", "TempleInt", "rand-forest01", "rand-forestnite1",
+    "Liangshan", "Rand-Desert", "IonaExt02", "KhosaniStrng", "LPalaceInt", "tancredhouse",
+    "LPalaceInt02", "KhosaniLab2", "Wolong2", "eleh", "lenele2aa", "lenele2ab", "lenele3a",
+    "lenele3d", "jadetemple", "lenele1aa", "lenele1ab", "TempleInt2", "IkaemosExt2",
+    "IkaemosBottomInt2", "Rand-HillsNite01", "Rand-Iceland01", "Rand-Grassland01",
+    "Rand-Orenia01", "Rand-OreniaNite01", "Rand-DesertNite01", "Rand-GrasslandNite01",
+    "Rand-IcelandNite01", "endgame", "lenele2d", "sewerboss",
+)
+# Two of those are legal *names* but not legal *targets*: `test` is a developer level, and
+# `endgame` is the Forge the whole run is aimed at - "never into the endgame" is one of the
+# recorded design constraints (RESEARCH-ENTRANCE-LOGIC.md section 4).
+DOOR_TARGET_EXCLUDE = frozenset({"test", "endgame"})
+DOOR_SENTINEL = "$zzz"      # reserved by the enemy disarm (`enemies_none`); never emitted
+
+DOOR_HOW_VALUES = ("shuffle", "swap", "off")
+
+
+def _door_key(name) -> str:
+    """A comparison key for a level name: lower case, letters and digits only."""
+    s = name.decode("latin-1") if isinstance(name, (bytes, bytearray)) else str(name)
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def _door_same_level(src_display: str | None, candidate: str) -> bool:
+    """Is `candidate` the level this door already stands in?
+
+    The stream names a door's source level only as a human comment (`Level file for
+    Catacombs`), never as an index, so this is a name comparison. Exact after normalisation,
+    or a prefix relationship between two names long enough that it cannot be coincidence
+    (`worldmap1` vs `worldmap`, `IkaemosBottomInt` vs `Ikaemos Bottom Interior`). Deliberately
+    conservative: a false positive only removes one candidate, while a false negative is a
+    door that leads back to where it already is.
+    """
+    if not src_display:
+        return False
+    a, b = _door_key(src_display), _door_key(candidate)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    return min(len(a), len(b)) >= 8 and (a.startswith(b) or b.startswith(a))
+
+
+def _door_records(blob: bytes) -> list[dict]:
+    """Every `+Id: "load level"` door in the stream, with the level file it stands in.
+
+    Parsed, never looked up from a precomputed table: a door is a `$Trigger: "name"` whose
+    own block's `+Id:` is `"load level"`, and its source level is the nearest preceding
+    `Level file for X` comment. A `$Trigger:` that is not a door (a character `.tbl`'s
+    animation cue) has no `+Id:` before the next `$Trigger:`, so it is skipped rather than
+    mis-counted. One forward pass, no regex backtracking across the stream.
+    """
+    heads = [(m.start(), m.group(1).strip().decode("latin-1", "replace"))
+             for m in DOOR_LEVEL_RE.finditer(blob)]
+    recs: list[dict] = []
+    src = None
+    hi = 0
+    for m in DOOR_TRIGGER_RE.finditer(blob):
+        while hi < len(heads) and heads[hi][0] < m.start(1):
+            src = heads[hi][1]
+            hi += 1
+        end = min(m.end() + DOOR_BLOCK_WINDOW, len(blob))
+        nxt = DOOR_TRIGGER_RE.search(blob, m.end(), end)
+        if nxt:
+            end = nxt.start()
+        idm = DOOR_ID_RE.search(blob, m.end(), end)
+        if not idm or idm.group(1) != b"load level":
+            continue
+        recs.append({"off": m.start(1), "name": m.group(1), "src": src})
+    return recs
+
+
+def _door_candidates(old_len: int, src_display: str | None) -> list[str]:
+    """Every legal target for one door. Empty means the door is left alone, not guessed at."""
+    out = []
+    for name in DOOR_TARGET_NAMES:
+        if len(name) > old_len:                     # the field is fixed width
+            continue
+        if name.lower() in DOOR_TARGET_EXCLUDE:     # a dev level / the ending itself
+            continue
+        if name.startswith(DOOR_SENTINEL):          # reserved by `enemies_none`
+            continue
+        if _door_same_level(src_display, name):     # never back to its own level
+            continue
+        out.append(name)
+    return out
+
+
+def _diff_outside(a: bytes, b: bytes, fields: list[tuple[int, int]]) -> int:
+    """How many bytes differ OUTSIDE the declared fields.
+
+    Compares the complement of the fields rather than every byte: the regions between them
+    are sliced and compared whole, so this is a C-speed equality check plus a per-byte count
+    only over regions that actually differ (which must be none).
+    """
+    n = 0
+    pos = 0
+    for off, ln in sorted(fields):
+        if a[pos:off] != b[pos:off]:
+            n += sum(1 for x, y in zip(a[pos:off], b[pos:off]) if x != y)
+        pos = max(pos, off + ln)
+    if a[pos:] != b[pos:]:
+        n += sum(1 for x, y in zip(a[pos:], b[pos:]) if x != y)
+    return n
+
+
+def t_door_destination_remap(blob, rng, how="shuffle"):
+    """Rewrite where every door leads. The headline feature.
+
+    Each door's destination name is replaced by another real level name that fits its field,
+    so the byte count in and out is identical and the stream never shifts. Everything is
+    checked and refused rather than guessed:
+
+      * the target must be a real `Level_info` name (the whole list is in the code);
+      * `len(new) <= len(old)` - the field is fixed width;
+      * a door never points at its own source level;
+      * the `$zzz` sentinel is never emitted - it belongs to the enemy disarm;
+      * a door with no legal target is left alone and counted as a skip.
+
+    Discipline, the same the binary layer and the lab applier hold to: every patch declares the
+    bytes it expects and is refused if the disc does not match; every patch is bounds-checked
+    and read back; and the whole reassembled stream is then compared byte for byte to prove
+    nothing outside a deliberately patched field moved.
+
+    `how`:
+      * ``shuffle`` (default) - each door independently gets a seeded random legal target.
+      * ``swap`` - the doors' own destinations are permuted among doors that can hold them,
+        so no destination is invented and none disappears. The gentler policy.
+      * ``off`` - change nothing and say so.
+
+    Risk this carries and does not hide: it changes the level graph itself. Reachability is
+    NOT checked, so a seed can strand the player. That guard is a separate work item.
+    """
+    rep = Report("door_destination_remap")
+    how = str(how)
+    if how not in DOOR_HOW_VALUES:
+        rep.notes.append(f"unknown how {how!r} - pick one of {list(DOOR_HOW_VALUES)}; "
+                         f"nothing changed")
+        return blob, rep
+
+    recs = _door_records(blob)
+    if not recs:
+        rep.notes.append("no `+Id: \"load level\"` doors found in this stream - nothing changed")
+        return blob, rep
+    rep.notes.append(f"{len(recs)} door(s) found by parsing the stream")
+
+    # sanity check on the level list itself: every destination already in the stream has to be
+    # a name this build knows, or the list is wrong for this disc and nothing should be written
+    known = {n.lower() for n in DOOR_TARGET_NAMES}
+    unknown = sorted({r["name"].decode("latin-1") for r in recs
+                      if r["name"].decode("latin-1").lower() not in known})
+    if unknown:
+        rep.notes.append(f"REFUSED: {len(unknown)} existing destination(s) are not in the "
+                         f"known level list {unknown[:6]} - the list does not match this disc, "
+                         f"so nothing was written")
+        return blob, rep
+
+    if how == "off":
+        rep.notes.append("policy 'off' - nothing changed")
+        return blob, rep
+
+    # deterministic per seed: the door order and the destination pool are both seeded, and the
+    # chain's Random is used in list order like every other transform
+    order = list(range(len(recs)))
+    rng.shuffle(order)
+    pool: list[bytes | None] = []
+    if how == "swap":
+        pool = [r["name"] for r in recs]
+        rng.shuffle(pool)
+
+    patches: list[tuple[int, bytes, bytes]] = []
+    skipped: dict[str, int] = {}
+
+    def _skip(why: str) -> None:
+        skipped[why] = skipped.get(why, 0) + 1
+
+    for idx in order:
+        rec = recs[idx]
+        old = rec["name"]
+        if how == "shuffle":
+            cands = _door_candidates(len(old), rec["src"])
+            if not cands:
+                _skip(f"no legal target of length <= {len(old)}")
+                continue
+            new = cands[rng.randrange(len(cands))].encode("latin-1")
+        else:
+            pick = None
+            for j, cand in enumerate(pool):
+                if cand is None or len(cand) > len(old):
+                    continue
+                if cand.decode("latin-1").lower() in DOOR_TARGET_EXCLUDE:
+                    continue
+                if cand.startswith(DOOR_SENTINEL.encode()):
+                    continue
+                if _door_same_level(rec["src"], cand.decode("latin-1")):
+                    continue
+                pick = j
+                break
+            if pick is None:
+                _skip("no remaining destination fits this field")
+                continue
+            new = pool[pick]                      # type: ignore[assignment]
+            pool[pick] = None
+
+        # the field is the name plus its closing quote; write new + quote + padding, so the
+        # replacement is exactly len(old)+1 bytes whatever the new name's length
+        repl = new + b'"' + b" " * (len(old) - len(new))
+        expect = old + b'"'
+        off = rec["off"]
+        if blob[off:off + len(expect)] != expect:    # declares-and-refuses, and bounds-checks
+            rep.notes.append(f"REFUSED: the door at stream offset 0x{off:X} does not hold "
+                             f"{expect!r}; nothing was written")
+            return blob, rep
+        patches.append((off, expect, repl))
+
+    # write into a copy, then read every patch back
+    out = bytearray(blob)
+    fields: list[tuple[int, int]] = []
+    for off, _expect, repl in patches:
+        out[off:off + len(repl)] = repl
+        fields.append((off, len(repl)))
+    bad = [off for off, _e, repl in patches
+           if bytes(out[off:off + len(repl)]) != repl]
+    if bad:
+        rep.notes.append(f"REFUSED: {len(bad)} patch(es) did not read back ({bad[:3]}); "
+                         f"nothing was written")
+        return blob, rep
+
+    # and prove the rest of the stream did not move: a differing byte outside a declared
+    # field would mean the write drifted, and then nothing is accepted
+    outside = _diff_outside(blob, bytes(out), fields)
+    if outside:
+        rep.notes.append(f"REFUSED: {outside} byte(s) differ outside a declared field")
+        return blob, rep
+
+    changed = sum(1 for off, _e, repl in patches if blob[off:off + len(repl)] != repl)
+    rep.changed = changed
+    noop = sum(1 for off, expect, repl in patches if blob[off:off + len(repl)] == repl)
+    skipped_n = sum(skipped.values())
+    rep.notes.append(f"{changed} destination(s) rewritten, {noop} landed on the name they "
+                     f"already had, {skipped_n} skipped")
+    for why, n in sorted(skipped.items()):
+        rep.notes.append(f"   skipped {n}: {why}")
+    rep.notes.append("every field is len(old)+1 bytes in and out - the stream never shifts")
+    rep.notes.append(f"policy '{how}'; targets are real level names only, never the door's "
+                     f"own level, never the $zzz sentinel")
+    rep.notes.append(f"read back: {len(patches)}/{len(patches)} patches verified, 0 bytes "
+                     f"changed outside a declared field")
+    rep.notes.append("RISK: changes the level graph; reachability is not checked, so a seed "
+                     "can strand the player")
+    return bytes(out), rep
+
+
 # Modes carry option VALUES as well as transform lists. Two rules, and they were both broken
 # until this was written down:
 #   1. a mode that includes a dial transform at its default does nothing - 100% is vanilla, and
@@ -1466,7 +1783,8 @@ def mode_options(mode: str, options: dict | None = None) -> dict:
 
 # transforms that accept keyword options from the request
 OPTION_AWARE = {"ring_hunt", "xp_scale", "levelcap_set", "permadeath", "enemy_difficulty",
-                "enemies_none", "enemies_swarm", "enemies_random", "enemies_amount"}
+                "enemies_none", "enemies_swarm", "enemies_random", "enemies_amount",
+                "door_destination_remap"}
 
 OPTIONS = {
     "xp_scale": {
@@ -1553,6 +1871,18 @@ OPTIONS = {
                     "all = turn every convertible peaceful placement into a monster.",
         },
     },
+    "door_destination_remap": {
+        "how": {
+            "type": "choice", "default": "shuffle",
+            "choices": list(DOOR_HOW_VALUES),
+            "label": "How to pick the new destination",
+            "help": "shuffle = every door picks its own seeded random real level of the same "
+                    "length or shorter; swap = the doors' own destinations are permuted among "
+                    "doors that can hold them, so no destination is invented and none "
+                    "disappears; off = change nothing. A door with nowhere legal to go is left "
+                    "alone and reported, never guessed at.",
+        },
+    },
 }
 
 
@@ -1577,6 +1907,13 @@ TRANSFORM_INFO = {
         "navpoint), few (a seeded ~70%), normal (vanilla, no edits), many (a seeded ~50% of "
         "the peaceful placements become monsters) or all (every convertible peaceful "
         "placement becomes a monster).",
+    ),
+    "door_destination_remap": (
+        "Door destinations",
+        "Rewrites the destination name inside every door's `$Trigger:` record, so doors lead "
+        "somewhere else. Finds the doors by parsing the level tables, rewrites only names that "
+        "fit the field, refuses anything it cannot prove, and changes the level graph itself - "
+        "reachability is not checked yet.",
     ),
     "shops_free": (
         "Free shops",
@@ -1786,6 +2123,7 @@ TRANSFORMS = {
     "shops_free": t_shops_free,
     "shops_crazy": t_shops_crazy,
     "shops_none": t_shops_none,
+    "door_destination_remap": t_door_destination_remap,
 }
 
 # second wave: generated from _SHUFFLE_SPECS so each is a plain (blob, rng) transform
@@ -1807,6 +2145,16 @@ MODES = {
         "blurb": "Door locks, names and sounds shuffled. No progression risk.",
         "transforms": ["lock_shuffle", "door_name_shuffle", "door_sound_shuffle"],
         "risk": "low",
+    },
+    "door_remap": {
+        "label": "Door Remap",
+        "blurb": "Where every door LEADS: all 218 door destinations are rewritten to other "
+                 "real levels, each name staying inside its own field so the archive cannot "
+                 "grow. This changes the level graph itself - doors can send you somewhere "
+                 "the game never intended, and nothing yet checks that the world stays "
+                 "completable.",
+        "transforms": ["door_destination_remap"],
+        "risk": "high - changes the level graph; reachability is unchecked",
     },
     "chaos": {
         "label": "Chaos",
@@ -2079,12 +2427,10 @@ PENDING = {
                   ".peg texture packs, which are not decoded.",
         "blocked_by": ".peg texture format",
     },
-    "door_destination_swap": {
-        "reason": "Door destinations are not in TABLES.VPP. $Door blocks carry only "
-                  "sound + lock data; the door -> level link lives in the .p3d level "
-                  "geometry, which is not decoded yet.",
-        "blocked_by": ".p3d format",
-    },
+    # `door_destination_swap` used to be blocked here on the claim that "door destinations are
+    # not in TABLES.VPP". That was overturned on 2026-09-20: a door IS the `$Trigger:` name in
+    # the level's own `.tbl`, and rewriting it is the `door_destination_remap` transform below.
+    # The entry is gone rather than left lying.
     "item_shuffle": {
         "reason": "Item records exist but their location is unconfirmed: .tbl chunk "
                   "names are arbitrary slices, so 'items.tbl' is not the item table.",
@@ -2324,7 +2670,7 @@ def randomize_iso(src: Path, dst: Path, seed: str, transforms: list[str],
         "dst_bytes": dst.stat().st_size,
         "size_preserved": src_bytes == dst.stat().st_size,
         "tables_entries": entries,
-        "changed_entries_region": {"offset": base + DATA_START, "bytes": len(blob)},
+        "changed_entries_region": {"offset": base + data_start(entries), "bytes": len(blob)},
         "reports": reports,
         "binary": binary_report,
     }

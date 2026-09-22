@@ -63,12 +63,13 @@ Ordered by value ÷ risk, all size-preserving:
 
 ---
 
-## Modes (33)
+## Modes (34)
 
 | Mode | What it changes | Tx | Risk |
 |---|---|---|---|
 | **Vanilla** | nothing — baseline | 0 | none |
 | **Door Shuffle** | door locks, names, sounds — **not** destinations; see the note below | 3 | low |
+| **Door Remap** | **where all 218 doors lead** — every `$Trigger:` destination rewritten to another real level, inside its own field | 1 | **high** — changes the level graph; reachability unchecked |
 | **Item Scatter** | which item sits at which pickup | 1 | low |
 | **Shop Shuffle** | every shop price | 1 | low |
 | **Free Shops** | every shop price → `0`, same field width | 1 | low |
@@ -122,27 +123,31 @@ Ordered by value ÷ risk, all size-preserving:
 
 ---
 
-## Door Shuffle is *not* destination shuffling
+## Door Shuffle is *not* destination shuffling — **Door Remap is**
 
 Worth stating plainly, because the name invites the mistake: the shipped **Door Shuffle** mode
 shuffles door **locks, names and sounds** (`lock_shuffle`, `door_name_shuffle`,
-`door_sound_shuffle`). It never changes where a door *leads*.
+`door_sound_shuffle`). It never changes where a door *leads*. It is unchanged and still means
+exactly that.
 
 **Where a door leads** is a `$Trigger:` name in the level's own `.tbl` — a text-layer field, 218 of
 them on the disc. Rewriting it is proven to work: 218 patches applied, size byte-identical, zero
 collateral bytes, and the disc **boots**. Full record: **`DOOR-REMAP.md`**.
 
-That capability is **not yet a mode in the app** — the applier is still a standalone script. The
-planned modes are:
+That capability is now a mode: **Door Remap** (`door_remap` → `door_destination_remap`). It parses
+the stream for every door, rewrites each destination to another real level name that fits the same
+field, refuses rather than guesses, and reports what it skipped and why. Choice of policy lives in
+one option:
 
-| Planned mode | What it does | Risk |
-|---|---|---|
-| **Room Shuffle** | permutes what a level is *made of*, keeping the level graph intact — the safe default | medium |
-| **Door Remap** | rewrites `$Trigger:` destinations — changes the graph, so it needs the reachability guard | high |
+| `how` | What it does |
+|---|---|
+| **shuffle** (default) | each door independently gets a seeded random real level |
+| **swap** | the doors' own destinations are permuted among doors that can hold them — no destination invented, none lost |
+| **off** | change nothing |
 
-Both are blocked on work, not on unknowns: `binary.py`'s registry is ELF-word-only, so
-`TABLES.VPP` byte-range edits need a sibling `DATA_PATCHES` registry (`DOOR-REMAP.md` §6.1), and
-Door Remap additionally needs the flood-fill guard (`RESEARCH-ENTRANCE-LOGIC.md` §4).
+**What is still missing:** the reachability guard (`ROOM`-class work, `RESEARCH-ENTRANCE-LOGIC.md
+§4`). Until it exists, a Door Remap seed can strand the player — which is why the mode's risk line
+says `high` and why **Room Shuffle stays the safe default** of the two ideas.
 
 ---
 
@@ -230,7 +235,7 @@ reversible, untested in game — treat Hardcore as the boldest mode in the list.
 
 ---
 
-## Transforms (41)
+## Transforms (42)
 
 Edit counts are for one sample seed on the Summoner 1 corpus; shuffle counts move by a
 handful seed to seed. The two dials (`xp_scale`, `levelcap_set`) read 0 at their neutral
@@ -238,6 +243,7 @@ handful seed to seed. The two dials (`xp_scale`, `levelcap_set`) read 0 at their
 
 | Transform | Targets | Edits |
 |---|---|---|
+| `door_destination_remap` | **where every door leads** — the `$Trigger:` destination name in all 218 doors | 200 |
 | `spawn_shuffle` | `$Start position` — relocates who stands where | 4,467 |
 | `dialogue_blank` | `+NPCText` / `+Stage` — empties text | 5,687 |
 | `dialogue_shuffle` | spoken text only, ids untouched | 4,910 |
@@ -304,18 +310,28 @@ them, so it appears only in Behaviour Chaos and Total Chaos.
 
 **Cleared since the last update:** ~~Door destinations / real entrance shuffle — `.p3d` level
 geometry~~. Doors are a text-layer `$Trigger:` name rewrite, proven applied and booting
-(`DOOR-REMAP.md`). The remaining work is a `DATA_PATCHES` registry plus a reachability guard —
-engineering, not a blocker.
+(`DOOR-REMAP.md`), and as of 2026-09-21 it ships as the `door_destination_remap` transform and the
+`door_remap` mode. The `DATA_PATCHES` registry turned out **not to be needed**: the engine already
+writes an entry's slice back to its own ISO range, so a door is an ordinary blob transform. The
+only thing left is the reachability guard.
+
+**Also cleared:** ~~the archive's segmentation map~~ for this purpose. A door is found by
+*parsing* the level tables, not by trusting an offset table, and the fix that made that possible
+is recorded in `FEATURES.md` §0: the data area starts at the next `0x800` boundary after the TOC,
+not at a fixed `0x1000`.
 
 ---
 
 ## The constraint everything obeys
 
-`TABLES.VPP` holds one continuous 6,771,975-byte text stream sliced into 527 chunks at
-arbitrary offsets — 424 of 526 boundaries cut mid-line. The boundaries are meaningless to
-the loader but must not move.
+`TABLES.VPP` holds one continuous 6,771,975-byte text stream sliced into 527 chunks, and the
+chunks are `0x800`-aligned inside the archive rather than being a plain concatenation. The
+assembler reassembles them in TOC order and works on that stream, so the alignment never reaches a
+transform: from the transforms' point of view the boundaries are meaningless and must not move.
 
 Every transform is therefore **length-neutral**: values are swapped only between equal-width
-fields, and flags renamed only with same-length strings. Nothing is inserted or deleted.
+fields, flags renamed only with same-length strings, and a door destination rewritten as
+`new + '"' + spaces(len(old) - len(new))` — the same byte count in and out. Nothing is inserted
+or deleted.
 
-Verified across all 41: **zero size violations.**
+Verified across all 42: **zero size violations.**
