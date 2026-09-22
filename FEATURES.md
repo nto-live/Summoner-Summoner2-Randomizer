@@ -180,3 +180,25 @@ unverified** to **verified in game** — or files what broke. Highest value firs
 5. **Fast Start / No Dialogue / cutscene bypass / instant fades** — the pacing stack.
 6. **Cosmetics** — sound, music, models, icons, cameras, fog: cheap to confirm, and they are the
    features that make a run feel different.
+
+---
+
+## 9. Requested additions — the owner's list (2026-09-21)
+
+Joshua asked for a specific set of modes and options: *Ring Hunt, Boss Rush, Oops All Enemies,
+Roguelike, Item Hunt, NPC Hunt, a Collectionthon*, and options for *how many enemies / randomised
+enemies / no enemies / chest randomisation / shop randomisation / all free / crazy numbers / no
+shops / randomised characters / randomised rooms / randomised enemy hp and stats / randomised
+player stats.*
+
+Each one is mapped to its mechanism and its honest state in **`MODES.md` → "Requested — the
+owner's list, organised"**. Summary: **three already exist** (Ring Hunt, Roguelike, shop
+randomisation — plus randomised characters and no-enemies as shipped transforms), **seven build
+now** with no unknowns (`enemies_amount` as one dial over the enemy count, `shops_free`,
+`shops_crazy`, `shops_none`, `chest_items`, `player_stats_random`, `enemy_stats_random`,
+`rooms_shuffle`), **two are designed** and need an inventory first (Boss Rush, NPC Hunt's
+cross-level version), and **one is blocked with a reason** (Collectionthon — the game has no
+collection counter; the two candidate mechanisms are written down instead of hand-waved).
+
+Work order, value ÷ risk: `enemies_amount` → the three shop levers → `chest_items` → the two stat
+transforms → `rooms_shuffle` → Boss Rush → Collectionthon.

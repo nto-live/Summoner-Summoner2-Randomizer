@@ -38,22 +38,23 @@ it is all written down, and re-deriving it has already cost days.
 
 ## The next action, specifically
 
-**Make the crossing honest.** The door *destination* is now proven in game (2026-09-21): a rewritten
-`$Trigger:` name loads that level, observed live (see `DOOR-REMAP.md` §4.5). What the harness still
-*forces* is the geometry - `crossing_test` and `inside_mesh` return 1 unconditionally, and the load
-arm is nop'd. The next step is to satisfy those for real, in this order:
+**Two things, in this order.**
 
-1. **Understand the crossing segment.** `*(*(rec+0x5C)+8)` for `masad`'s door is
-   `(-191.857, 104.794, 83.461) -> (-197.781, 104.794, 101.637)` - a different coordinate range
-   from the player (39.75, -5.22, 88.27), which is why hand-made pushes missed. `door-helpers-decomp.c`
-   has `FUN_0017e4d8` (point convert), `FUN_0017ee40` (segment test) and `FUN_0017e548` (side/in
-   test) still to read.
-2. **Then** drive the player there with PINE writes (`door_push.py`) and fire the door with the
-   gates *real*.
-3. **Then** drop the door-gate and load-arm patches and re-run the A/B: does a remapped disc still
-   load the remapped level with only the player's movement synthesised?
+**1. The headline feature is not in the engine yet.** Door-destination remapping is proven in game
+but lives in lab scripts (`make_door_test_iso.py`, `apply_door_remap.py`); `cli.py` cannot remap a
+destination. Make it a real seed-driven transform with the constraints enforced and refused rather
+than guessed — target must be a real level name, `len(new) <= len(old)`, `+Index:` must exist in
+the destination, and blocks with no `+Script:` may only target same-name levels. `DOOR-REMAP.md`
+§6.1 is the design (the `DATA_PATCHES` sibling in `binary.py`/`rando_core.py`).
 
-In parallel, two named work items:
+**2. The owner's requested build queue** (`MODES.md` → "Requested — the owner's list, organised"):
+`enemies_amount` (one dial covering how-many / none / all-enemies) → `shops_free`, `shops_crazy`,
+`shops_none` → `chest_items` → `player_stats_random`, `enemy_stats_random` → `rooms_shuffle` →
+Boss Rush (needs a boss inventory) → Collectionthon (blocked on a completion mechanism).
+
+Then the test plan in `FEATURES.md` §8 runs down the whole catalogue.
+
+Also still open from before:
 
 - **`DATA_PATCHES` sibling in `binary.py`** — an arbitrary byte-range patch class for `TABLES.VPP`,
   carrying the same declare-and-refuse + read-back discipline. Design in `DOOR-REMAP.md` §6.1;

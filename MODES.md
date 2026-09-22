@@ -8,6 +8,61 @@ Run `python build.py --list` for the same thing from the terminal.
 
 ---
 
+## Requested — the owner's list, organised (2026-09-21)
+
+Joshua, verbatim: *"I want these modes. Ring hunt, Boss Rush, Oops all enemies, roguelike mode,
+item hunt, npc hunt, a collectionthon. Options: How many Enemies? Randomized? No enemies? Chest
+Randomization. Shop Randomization / Make it all free / Make it all crazy numbers. No Shops /
+randomized characters / Randomized rooms / Randomized enemy hp and stats. Randomized player
+stats."*
+
+Below is every requested item, the mechanism it maps onto, and its honest state. Status is one
+of: **exists** (shipped), **build now** (mechanism known, size-preserving, no unknowns),
+**designed** (needs an inventory or a design decision first), **blocked** (with the reason).
+
+### Modes
+
+| Requested | Mechanism | Status |
+|---|---|---|
+| **Ring Hunt** | rename a 13-character `+Event:` flag to `ready_for_end`; `any-ring` = 4 anchors with a ring beside them | **exists** (`ring_hunt`) |
+| **Boss Rush** | bosses are placements carrying `+Boss`; the first version re-points every boss placement's `$Start position` at navpoints inside one arena level, so they stand together | **designed** — needs the boss inventory (blocks with `+Boss`) and the arena's navpoint list. A true gauntlet (arena → arena chaining) rides on the level graph |
+| **Oops All Enemies** | every placement becomes hostile: 2,037 peaceful placements re-pointed at creature names, plus the 2,220 monsters kept and randomised | **build now** — this is `enemies_amount: all` |
+| **Roguelike** | the pressure stack: creature stats, spawns, loot, shops, chests scrambled; XP cut; prices up | **exists** (`roguelike`) |
+| **Item Hunt** | loose pickups re-scattered (`item_scatter`) *and* items moved out of shop stock and quest rewards into containers, so they have to be found | **partially exists** — the scatter half ships; the "out of shops, into chests" half is `chest_items` + shop-stock work |
+| **NPC Hunt** | NPCs stop being where you left them: placement anchors shuffled (`spawn_shuffle`) and identities shuffled (`npc_character_shuffle`), stacked into one mode | **build now** (a mode over two shipped transforms); the stronger version — NPCs relocated across *levels* — is **designed** |
+| **Collectionthon** | a run that is about collecting: all pickups + all chest contents relocated, and the ending gated on having collected them | **designed, and partly blocked**: the game has no collection counter. Two candidate mechanisms: (a) rename an unused `+Event:` flag to `ready_for_end` and set it at the last collection point — cheap but only checks one item; (b) a binary patch to gate the ending on a counter — the layer exists, the counter does not. Reason recorded rather than hand-waved |
+
+### Options
+
+| Requested | Mechanism | Status |
+|---|---|---|
+| **How many enemies?** | one dial over one mechanism set: `none` = navpoint-unlink (already proven in game), `few` = unlink a seeded majority, `normal` = untouched, `many` = convert a seeded share of peaceful placements to monsters, `all` = convert all of them | **build now** — `enemies_amount`, subsumes three of the items below |
+| **Randomized (enemies)?** | swap which creature stands on each placement, and its `+Level:`, between equal-length values | **exists** (`enemies_random`) — needs exposing as a dial rather than a separate mode |
+| **No enemies?** | every monster placement unlinked from its navpoint | **exists and verified in game** (`enemies_none`) — becomes `enemies_amount: none` |
+| **Chest randomisation** | payouts shuffled (`chest_shuffle`, ships) **and** which *item* a container yields (`+Give` names), between equal-length item names | **half exists** — `chest_items` is **build now** |
+| **Shop randomisation** | every `$Value` price shuffled among equal widths | **exists** (`shop_shuffle`) |
+| **Make it all free** | every `$Value` price → `0`, same field width | **build now** — `shops_free` |
+| **Make it all crazy numbers** | every `$Value` → the largest value its field can hold (`999`, `9999`…) | **build now** — `shops_crazy` |
+| **No shops** | re-point `+Shop`-bearing shopkeeper placements at equal-length non-shopkeepers, so the shop does not exist | **build now** — `shops_none` (needs the shopkeeper list: characters whose definition carries `+Shop`) |
+| **Randomized characters** | shuffle `$Character` values between equal lengths — who stands where | **exists** (`npc_character_shuffle`) |
+| **Randomized rooms** | permute what populates a level *within* the level: shuffle `$Start position` anchors between placements of the same kind in the same level, so rooms are furnished differently while the level graph, doors and quests stay intact. This is the safe half of the design fork in `RESEARCH-ENTRANCE-LOGIC.md` §2 | **build now, first version** — `rooms_shuffle`. The deeper version (a level's whole interior swapped with another's) is **designed** |
+| **Randomized enemy hp and stats** | two levers, both shipped separately: `enemy_difficulty` *scales* hit points/aggression/ranges; `creature_stats_shuffle` *shuffles* speed/weight/attack radius. Requested form = shuffle the hostile `#Character Info` numbers themselves | **build now** — `enemy_stats_random` |
+| **Randomized player stats** | shuffle the numeric fields between **friendly** `#Character Info` blocks (the playable party), equal widths only | **build now** — `player_stats_random` |
+
+### The build queue this produces
+
+Ordered by value ÷ risk, all size-preserving:
+
+1. `enemies_amount` — one dial that covers "how many enemies", "no enemies" and "oops all enemies"
+2. `shops_free`, `shops_crazy`, `shops_none` — three small, self-contained shop levers
+3. `chest_items` — real chest randomisation instead of payout shuffling
+4. `player_stats_random`, `enemy_stats_random` — the two stats items
+5. `rooms_shuffle` — the safe half of the room idea
+6. **Boss Rush** — needs a boss inventory first
+7. **Collectionthon** — needs a completion mechanism; the reason is recorded, not skipped
+
+---
+
 ## Modes (29)
 
 | Mode | What it changes | Tx | Risk |
