@@ -929,8 +929,7 @@ CREATURE_FLOAT_FIELDS = (
 )
 
 # The dial the owner asked for: easy easy -> impossible. 100 = vanilla.
-ENEMY_DIFFICULTY = {
-    "trivial": 50,
+ENEMY_DIFFICULTY = {    "trivial": 50,
     "easy": 75,
     "normal": 100,
     "hard": 160,
@@ -1219,6 +1218,22 @@ def t_enemy_difficulty(blob, rng, level="normal", level_shift=0):
     rep.notes.append("every value rewritten inside its own field width - size preserving")
     rep.notes.append("deterministic - identical on every seed")
     return bytes(out), rep
+
+
+# Modes carry option VALUES as well as transform lists. Two rules, and they were both broken
+# until this was written down:
+#   1. a mode that includes a dial transform at its default does nothing - 100% is vanilla, and
+#      `enemy_difficulty` at `normal` is a no-op. Every mode that uses one must set a value.
+#   2. mode values are the DEFAULTS, not an override: an explicit request wins. The engine
+#      merges them in one place (`mode_options`) so the CLI, the app and any harness agree.
+def mode_options(mode: str, options: dict | None = None) -> dict:
+    """Mode defaults, with the caller's explicit options laid over the top."""
+    merged = {k: dict(v) for k, v in (MODES.get(mode, {}).get("options") or {}).items()}
+    for name, vals in (options or {}).items():
+        if vals is None:
+            continue
+        merged.setdefault(name, {}).update(vals)
+    return merged
 
 
 # transforms that accept keyword options from the request
@@ -1568,13 +1583,15 @@ MODES = {
         "blurb": "Hostile creatures pinned to the top of every stat field they own and to "
                  "the highest level their +Level: field can hold.",
         "transforms": ["enemy_difficulty"],
+        "options": {"enemy_difficulty": {"level": "impossible"}},
         "risk": "high - untested in game; may be unwinnable by design",
     },
     "easy_enemies": {
         "label": "Easy Enemies",
-        "blurb": "Hostile creatures cut to half hit points, aggression and reach. A gentler "
-                 "world for a randomised run.",
+        "blurb": "Hostile creatures cut to three quarters hit points, aggression and reach - "
+                 "plus whatever the difficulty dial is set to.",
         "transforms": ["enemy_difficulty"],
+        "options": {"enemy_difficulty": {"level": "easy"}},
         "risk": "low",
     },
     "everything": {

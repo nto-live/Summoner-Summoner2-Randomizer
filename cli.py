@@ -288,7 +288,9 @@ def cmd_build(a) -> int:
         return 2
 
     tf, binary_spec = _resolve(a.mode, a.transforms, a.include, a.exclude)
-    options = json.loads(a.options) if a.options else {}
+    # Mode defaults first, explicit --options on top. Without this a mode like `progression`
+    # (which ships {"xp_scale": {"percent": 200}}) silently ran at 100% - i.e. did nothing.
+    options = rc.mode_options(a.mode, json.loads(a.options) if a.options else {})
     if a.exclude_permadeath:
         tf = [t for t in tf if t != "permadeath"]
 
