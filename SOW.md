@@ -133,6 +133,8 @@ Everything is checked by booting it, not by assertion:
 | `RESEARCH-*.md` | techniques taken from other randomizers, entrance-logic survey |
 | `TIMER-DESIGN.md` | timed runs (designed, deferred by request) |
 | `RESUME.md` | where the work stands, in one screen |
+| `PLANNED.md` | **the to-be-implemented log** — every decided-but-unbuilt item, with state, mechanism and acceptance |
+| `FEATURES.md` | the measured catalogue: what exists, with edit counts and verification status |
 
 ## 11. Legal and ethical
 

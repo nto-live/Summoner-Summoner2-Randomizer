@@ -47,7 +47,8 @@ than guessed — target must be a real level name, `len(new) <= len(old)`, `+Ind
 the destination, and blocks with no `+Script:` may only target same-name levels. `DOOR-REMAP.md`
 §6.1 is the design (the `DATA_PATCHES` sibling in `binary.py`/`rando_core.py`).
 
-**2. The owner's requested build queue** (`MODES.md` → "Requested — the owner's list, organised"):
+**2. The owner's requested build queue** (`MODES.md` → "Requested — the owner's list, organised",
+and tracked item-by-item in **`PLANNED.md`**, the to-be-implemented log):
 `enemies_amount` (one dial covering how-many / none / all-enemies) → `shops_free`, `shops_crazy`,
 `shops_none` → `chest_items` → `player_stats_random`, `enemy_stats_random` → `rooms_shuffle` →
 Boss Rush (needs a boss inventory) → Collectionthon (blocked on a completion mechanism).
@@ -138,6 +139,7 @@ python F:\rando\S1\notes\verify_doors.py
 | `RESEARCH-SOTN.md` | techniques taken from the SotN randomizer (PPF patch output, seed URLs) |
 | `RESEARCH-ENTRANCE-LOGIC.md` | **how doors are solved genre-wide** — logic tiers, constraints, mode taxonomy, PNACH |
 | `TIMER-DESIGN.md` | timed runs (deferred by request, design recorded) |
+| `PLANNED.md` | **the to-be-implemented log**: state, mechanism and acceptance for every decided-but-unbuilt item |
 | `F:\rando\S1\notes\pcsx2-headless-FINDINGS.md` | the full headless write-up, including dead ends |
 | `F:\rando\S1\notes\door-mechanism.md` | the doors analysis: trigger records, the `#Triggers` parser, 51-level inventory, patch strategies |
 | `F:\rando\S1\notes\door-triggers.json` · `door-remap-example.json` | the 218 doors, and the 218 concrete patches |

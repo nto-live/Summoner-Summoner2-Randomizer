@@ -1,0 +1,165 @@
+# PLANNED.md — the to-be-implemented log
+
+Everything that is *decided and not yet built*, in one place, so nothing lives only in a chat
+message. Companion to `FEATURES.md` (what exists, measured) and `MODES.md` (how the modes read to
+a player).
+
+**State legend**
+
+| State | Means |
+|---|---|
+| **NEXT** | at the top of the queue; no unknowns left |
+| **QUEUED** | decided, mechanism identified, not started |
+| **BLOCKED** | cannot be built yet — the reason and what it waits on are written here |
+| **DONE** | built; the entry moves to `FEATURES.md` and the row is struck here |
+
+**Acceptance for every item, without exception:** the transform is size-preserving (checked by
+`inventory.py`), it is registered in the engine (visible in `cli.py --list`), its measured edit
+count is recorded in `FEATURES.md`, the ops side is written down, and — where it can be — it is
+verified in game by the headless rig. Anything that cannot be verified in game says so.
+
+---
+
+## 1. NEXT — in order
+
+### 1.1 `enemies_amount` — one dial for how many enemies
+**Requested as:** "How many enemies?", "No enemies?", "Oops all enemies".
+**Mechanism:** `none` = navpoint-unlink every monster placement (already proven in game);
+`few` = unlink a seeded majority; `normal` = untouched; `many` = convert a seeded share of the
+peaceful placements to monsters; `all` = convert every one of them.
+**Why one transform:** three requested options are the same lever at different values, and three
+transforms would drift apart.
+**Acceptance:** five option values produce five distinguishable edit counts; `none` matches the
+shipped `enemies_none` behaviour exactly (4,067 edits on the retail disc).
+
+### 1.2 `shops_free`, `shops_crazy`, `shops_none` — the shop levers
+**Requested as:** "Make it all free", "Make it all crazy numbers", "No Shops".
+**Mechanism:** rewrite every `$Value` price to `0`; rewrite it to the largest value its field
+holds (`999`, `9999`…); and for "no shops" re-point the placements of shopkeepers — characters
+whose definition carries `+Shop` — at equal-length non-shopkeepers, so the shop is simply absent.
+**Queued before:** gather the shopkeeper list (which `$Character` definitions carry `+Shop`).
+**Acceptance:** prices are all zero / all maximal with the field width preserved; no `+Shop`
+character is reachable in the world afterwards.
+
+### 1.3 `chest_items` — randomise what a chest *yields*
+**Requested as:** "Chest Randomization" (the real version).
+**Mechanism:** `chest_shuffle` today moves the payout *numbers*; this moves the **item names**
+inside `+Give`, between equal-length names, so a cheap chest can hold something precious.
+**Caveat carried from research:** chest `+Give` does not set the `got_ring_of_*` flags, and the
+Ring of Jade has no grant record anywhere — so ring progression cannot be routed through chests.
+**Acceptance:** item names change, counts preserved, no chest left empty.
+
+### 1.4 `player_stats_random`, `enemy_stats_random` — the two stat items
+**Requested as:** "Randomized enemy hp and stats", "Randomized player stats".
+**Mechanism:** shuffle the numeric fields inside `#Character Info` blocks — hostile blocks for the
+enemy side, `$Team: "friendly"` blocks for the playable party — between equal widths only.
+`enemy_difficulty` already *scales* the hostile numbers; this *shuffles* them.
+**Acceptance:** stats move between creatures, widths preserved, and no creature left with values
+that cannot be expressed.
+
+### 1.5 `rooms_shuffle` — randomised rooms, safe half
+**Requested as:** "Randomized rooms".
+**Mechanism:** permute what populates *within* a level: shuffle `$Start position` anchors between
+placements of the same kind in the same level. Doors, quests, navpoints and the level graph never
+change, so unreachable regions are impossible by construction — this is the safe half of the
+design fork in `RESEARCH-ENTRANCE-LOGIC.md` §2.
+**Not in scope here:** swapping a level's whole interior with another level's (designed, riskier).
+**Acceptance:** anchors permute within a level and never across levels; every destination anchor
+still exists.
+
+---
+
+## 2. QUEUED — decided, mechanism known
+
+### 2.1 Door destination remap **inside the engine** *(the headline feature)*
+Proven in game on 2026-09-21, but it lives in lab scripts (`make_door_test_iso.py`,
+`apply_door_remap.py`); `cli.py` cannot remap a destination. Make it a seed-driven transform with
+the constraints *enforced and refused*, never guessed:
+target must be a real `Level_info` name; `len(new) <= len(old)`; `+Index:` must exist as a
+`$player…` navpoint in the destination; a block with no `+Script:` may only target a level whose
+base script name equals its own; `$zzz`-style sentinels are reserved.
+Design: `DOOR-REMAP.md` §6.1 (the `DATA_PATCHES` sibling for `binary.py`/`rando_core.py`),
+reference implementation `apply_door_remap.py`.
+**Blocks:** the "Door Shuffle" mode currently overpromises — it shuffles names, locks and sounds.
+**Acceptance:** a seeded remap reproduces the A/B that already passes for the lab script
+(`DOOR-REMAP.md` §4.5).
+
+### 2.2 `DATA_PATCHES` — a byte-range patch class in the engine
+Required by 2.1: the current `binary.py` registry patches one 4-byte word at one virtual address.
+A `TABLES.VPP` range is a different class of edit. Same two non-negotiables (declare-and-refuse,
+read-back) plus bounds-checking against the archive region and a clean whole-image diff.
+
+### 2.3 Boss Rush
+**Requested as:** "Boss Rush".
+Bosses are placements carrying `+Boss`. v1 re-points every boss placement's `$Start position` at
+navpoints inside a single arena level, so the bosses stand together and can be fought in one place.
+**Needs first:** the boss inventory (blocks carrying `+Boss`) and the arena's navpoint list.
+A *sequential* gauntlet — arena → arena chaining — rides on the level graph and is a later item.
+
+### 2.4 Item Hunt — the "out of the shops, into the chests" half
+`item_scatter` already moves loose pickups. This item moves goods out of shop stock and quest
+rewards and into containers, so they have to be found rather than bought.
+
+### 2.5 NPC Hunt — cross-level relocation
+The mode built from `spawn_shuffle` + `npc_character_shuffle` ships first; relocating NPCs to
+*other levels* is the stronger version and needs the placement/level cross-reference checked.
+
+### 2.6 In-game level/room readout
+Show `LEVEL · PLANE n` on the game's own screen and log it from inside the game's execution.
+Known: the text draw is `FUN_00133608(x, y, char *s, ?, font)`; the room is the `+Plane:` id, and
+the player's copy is at `entity+0x698`. Needs a code cave that survives startup (the ELF clears
+BSS from `0x01285A80` to `0x01B42474`); `find_code_cave.py` locates one.
+**Also useful for:** the honest door crossing, so a door can be watched rather than inferred.
+
+### 2.7 Level-raise tool
+**Requested as:** "something that raises the characters level" — automatically or inline.
+*Inline:* per-session XP/level writing over PINE (`living_entity::adjust_experience` `0x001B9DE8`,
+`experience_needed_for_level` `0x001A7BE8`, `Experience_table` `0x00384480`); the struct offset
+still has to be read out of the function.
+*Automatic:* `xp_scale`/`levelcap_set` already ship; a one-click preset is the small win.
+
+### 2.8 The honest door crossing
+The in-game door proof currently *forces* the two geometry gates (`crossing_test`,
+`inside_mesh`) and nops the load-arm test. Satisfy the crossing for real: read
+`FUN_0017e4d8` / `FUN_0017ee40` / `FUN_0017e548`, drive the player with PINE writes, then drop the
+harness patches and re-run the A/B.
+
+### 2.9 In-game checks for Swarm and the Difficulty dial
+`enemies_none` is verified against a control; `enemies_swarm` and `enemy_difficulty` change bytes
+but nobody has watched a fight.
+
+### 2.10 `--patch-only` output
+Emit a small patch file instead of a 1.2 GB ISO: seeds become tiny and shareable *without*
+distributing game data, and the ~80 s build drops to seconds. Precedent: SotN's PPF, PNACH
+(`RESEARCH-SOTN.md`, `RESEARCH-ENTRANCE-LOGIC.md` §9.1).
+
+### 2.11 Seed sharing
+Seed URLs / seed cards, SotN style. Seeds are already reproducible; this is the packaging.
+
+---
+
+## 3. BLOCKED — reason and what would unblock it
+
+| Item | Blocked by |
+|---|---|
+| **Collectionthon** | the game has no collection counter. Two candidates: rename an unused `+Event:` flag to `ready_for_end` (cheap, checks one thing) or patch the executable to gate the ending on a counter (the binary layer exists; the counter does not) |
+| Encounter-rate scaling | the `#Resistances` block layout is unmapped |
+| Character colours | `.peg` texture format undecoded |
+| Item relocation across the board | the blob's segmentation map (chunk names are unreliable) |
+| Level order | the runtime level-id → name table |
+| One Hour (true version) | a flag graph plus a reachability solver |
+| Character models | `.mvf` format |
+| Creatures the game spawns from code (~38 of 80 names) | their stat sheets are in the executable's `.data`, not the text layer |
+| Any edit that grows the archive | the archive-slack question (≈619 KB unused; needs a boot test) |
+| Summoner 2 (any of it) | the VPP v2 reader does not exist |
+
+---
+
+## 4. Closing an item
+
+1. Implement as a size-preserving transform; refuse rather than guess.
+2. `python inventory.py` — confirm the edit count and that the output length is identical.
+3. Register it so `cli.py --list` shows it; wire options and any mode that uses it.
+4. Move the row from this file into `FEATURES.md` with its measured numbers.
+5. Verify in game if it can be; otherwise say plainly that it cannot.
+6. Commit with the measurement in the message.
