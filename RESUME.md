@@ -33,27 +33,38 @@ it is all written down, and re-deriving it has already cost days.
 | **In-game verification** | **LIVE. It plays.** Headless PCSX2 reaches real gameplay (level `masad`, triggers parsed, player entity walking) - needs `Renderer = 13` (Software); Vulkan silently freezes the game. `COMPILED-CODE.md` §8. |
 | **Doors** | **SOLVED** — mechanism found, 218-patch remap built, applied clean, disc **boots** |
 | **Door remap in game** | **VERIFIED 2026-09-21** — two discs differing only in one rewritten `$Trigger:` name load two different levels, read straight off the live game. `DOOR-REMAP.md` §4.5 |
-| **Active work** | **honest crossing** — the harness forces the geometry gates; the real crossing test is next |
+| **Door remap in the engine** | **DONE** — `door_destination_remap` is a real seed-driven transform, mode `door_remap`, constraints enforced and refused. No `DATA_PATCHES` class was needed |
+| **Active work** | **the two stat items** — `player_stats_random` / `enemy_stats_random` (`PLANNED.md` §1.4) |
 | **Owner's directive** | *"Iterate on this until you get a patched working copy. First feature is the doors."* |
 
 ## The next action, specifically
 
 **Two things, in this order.**
 
-**1. The headline feature is not in the engine yet.** Door-destination remapping is proven in game
-but lives in lab scripts (`make_door_test_iso.py`, `apply_door_remap.py`); `cli.py` cannot remap a
-destination. Make it a real seed-driven transform with the constraints enforced and refused rather
-than guessed — target must be a real level name, `len(new) <= len(old)`, `+Index:` must exist in
-the destination, and blocks with no `+Script:` may only target same-name levels. `DOOR-REMAP.md`
-§6.1 is the design (the `DATA_PATCHES` sibling in `binary.py`/`rando_core.py`).
+**1. `player_stats_random` / `enemy_stats_random`** (`PLANNED.md` §1.4) — shuffle the numeric
+fields inside `#Character Info` blocks: hostile blocks for the enemy side, `$Team: "friendly"`
+blocks for the party. Equal widths only. `enemy_difficulty` already *scales* hostile numbers;
+this *shuffles* them. Recon is done (`work/_probe_stats.py`): 160 blocks carry a `$Team:` —
+80 friendly, 80 hostile (78 `hostile` + 1 `Hostile` + 1 `evil`, matching `_hostile_char_blocks`).
+All ten numeric fields are present in all 160 blocks, with wide width spreads, so a same-width
+shuffle is legal — e.g. hostile `$Max Hit Points` splits w2×11 / w3×58 / w4×11, hostile
+`$Attack Radius` is w3 for all 80. Also present and unused by any transform yet: `$Teamwork`,
+`$Conservation`, `$Slow/Fast/Moving turn rate`, `$Experience Gained`, `$Skill`, `$Damage`,
+`+Resistances`. There is **no** Strength/Dexterity/Intelligence — "player stats" here means
+HP / AP / aggressiveness / ranges / turn rates.
 
-**2. The owner's requested build queue** (`MODES.md` → "Requested — the owner's list, organised",
-and tracked item-by-item in **`PLANNED.md`**, the to-be-implemented log):
-`enemies_amount` (one dial covering how-many / none / all-enemies) → `shops_free`, `shops_crazy`,
-`shops_none` → `chest_items` → `player_stats_random`, `enemy_stats_random` → `rooms_shuffle` →
-Boss Rush (needs a boss inventory) → Collectionthon (blocked on a completion mechanism).
+**2. `rooms_shuffle`** (`PLANNED.md` §1.5) — permute `$Start position` anchors between
+placements of the same kind *within* a level; the level graph, doors and quests never change.
+
+**3. Then** Boss Rush (needs a boss inventory), Collectionthon (blocked on a completion
+mechanism), and the open in-game checks — `PLANNED.md` §2.8 (the honest door crossing),
+§2.14 (217 of the 218 doors have never been watched), §2.16 (the `chest_items` grant).
 
 Then the test plan in `FEATURES.md` §8 runs down the whole catalogue.
+
+> **Doc note (2026-09-28):** this section was stale for a week — it still said the headline
+door feature was unbuilt when `door_destination_remap` had already landed (`DOOR-REMAP.md` §6.1,
+`PLANNED.md` §2.1/§2.2). Items 1–3 above are the corrected queue.
 
 Also still open from before:
 
