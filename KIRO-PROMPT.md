@@ -114,6 +114,32 @@ python F:\rando\S1\notes\pine.py status
 Active BIOS on this host: **`ps2-0200a-20040614.bin`** (v2.00 USA, SCPH-70012). PCSX2 2.8.1, PINE
 enabled. Client: `F:\rando\S1\notes\pine.py` — one client at a time; kill leftovers before connecting.
 
+### 4.1 If you are **not** on the host that holds the disc
+
+The repo contains no disc, no blob, no BIOS, and no emulator — by design. If you are working on a
+plain clone (Kiro on a laptop, for instance) you can still **measure**, which is most of the
+definition of done. Build the measurement fixture from a disc image you already own:
+
+```bash
+python tools/make_fixture.py --iso "D:\path\to\your\Summoner.iso" --out work/tables_blob.bin
+python tools/make_fixture.py --check work/tables_blob.bin
+```
+
+`--check` must print **218 doors**. A fixture built with the old archive-offset rule sees **1**,
+because it is missing the level files — that stale file caused every wrong number in `FEATURES.md`.
+If `--check` does not say 218, rebuild; do not measure against it.
+
+The fixture is game data: it lives in `work/` (gitignored) on whichever machine made it. **Never
+commit it, and never move it through a messaging channel.** Copy it between your own machines
+however you copy your own discs. With it you can run edit counts, size-preservation checks and the
+whole-stream diff for any transform — no emulator, no ISO, no PCSX2.
+
+What you still cannot do off-host: anything ISO-level (`--build`, `--verify`, `door_destination_remap`
+against a real image), and anything that needs the game running. Hand those to the host, with the
+exact command and the seed, and have it report back.
+
+### 4.2 Measurement without the host
+
 ---
 
 ## 5. Where the project actually stands
@@ -237,6 +263,8 @@ Every shipped item in this repo did all six. Match it.
    through `rando_core.mode_options`, because a mode that uses a dial **must** set a value
    (three modes silently did nothing until this rule was written down, `FEATURES.md` §0).
 4. **The measurement**, against the disc, added to `MODES.md` and `FEATURES.md`. Numbers, not "works".
+   Off-host, measure against a `--check`-verified fixture instead (`tools/make_fixture.py`, §4.1), and
+   say which source you used.
 5. **`PLANNED.md` updated** — the row struck if done, or re-stated with the new blocker.
 6. **The commit.** Style is `lowercase: what changed, and why it is honest` — e.g.
    `chest_items: real chest randomisation, and the plan had the field wrong`. The docs go in the
