@@ -1,0 +1,494 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Implement `t_enemy_hp_set(blob, rng, value=1)` in `src/rando_core.py`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636901043
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636915835
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636995620
+      }
+    ],
+    "1.2 Register `enemy_hp_set` in the four registries in `src/rando_core.py`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636901217
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637086780
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637228902
+      }
+    ],
+    "1.3 Write property test for uniform HP write, per-field clamp, width preserved": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636901315
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637238268
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637458380
+      }
+    ],
+    "1.4 Write property test that only HP fields change": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636901417
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637239652
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637459589
+      }
+    ],
+    "2.1 Rewrite `cmd_seeds` in `src/cli.py`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636901520
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636917145
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636997000
+      }
+    ],
+    "2.2 Write property test for seed format and casing": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636901688
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637088149
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637229644
+      }
+    ],
+    "2.3 Write property test that seeds are distinct per generation": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636901775
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637089519
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637231085
+      }
+    ],
+    "3.1 Add repeatable `--binary <name>` flag and union it into `binary_spec` in `src/cli.py`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636901879
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636999688
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637080790
+      }
+    ],
+    "4.1 Add a `blocked` reason to the `skip_intro` Patch in `src/binary.py`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636902007
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636918495
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636998472
+      }
+    ],
+    "4.2 Write property test that a blocked binary patch never aborts the build": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636902080
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637090515
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637232132
+      }
+    ],
+    "5. Checkpoint - engine registration and behaviour": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636902167
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638920771
+      }
+    ],
+    "6.1 Registration-visible example test": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636902248
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637240606
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637461129
+      }
+    ],
+    "6.2 Dry-run and combined-build integration tests on the Source ISO": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636902339
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637479424
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637941983
+      }
+    ],
+    "7.1 Add `\"enemy_hp_set\"` to the Gameplay HashSet in `MainForm.cs`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636902423
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637242066
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637462453
+      }
+    ],
+    "8.1 Extend `BinaryInfo` and `BuildResult` in `Models.cs`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636902509
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637243224
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637463591
+      }
+    ],
+    "9.1 Add the \"Binary patches\" section in `MainForm.cs`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636902595
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637480689
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637943597
+      }
+    ],
+    "10.1 Extend `EngineClient.BuildArgs` with a `binary` parameter in `EngineClient.cs`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636903526
+      },
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637481730
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637945033
+      }
+    ],
+    "10.2 Pass `_binarySelected` from `RunBuildAsync` in `MainForm.cs`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636903734
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638025701
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638077988
+      }
+    ],
+    "11.1 Show `skip_intro` present-but-pending in `HandleBuildResult` (`MainForm.cs`)": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636903919
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638078186
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638149107
+      }
+    ],
+    "12.1 Confirm seed field needs no structural change in `MainForm.cs`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636904076
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637961638
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638020480
+      }
+    ],
+    "13. Checkpoint - desktop build": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636904216
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638921511
+      }
+    ],
+    "14.1 Run Python engine tests and fix failures": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636904490
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638156292
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638450969
+      }
+    ],
+    "14.2 Combined dry-run/build producing one ISO with all four options + `--verify --against`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636904669
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638457021
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638595805
+      }
+    ],
+    "15.1 Update `docs/MODES.md`, `docs/FEATURES.md`, `docs/PLANNED.md`, `docs/RESEARCH-SKIP-INTRO.md`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790636904830
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638604771
+      },
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638909853
+      }
+    ],
+    "3. Engine: expose binary patches independently of modes via `--binary`": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637080970
+      }
+    ],
+    "2. Engine: rewrite seed generation to emit `NTO_LIVE_` seeds": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637231229
+      }
+    ],
+    "4. Engine: mark `skip_intro` as present-but-pending": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637232225
+      }
+    ],
+    "1. Engine: add the `enemy_hp_set` transform and register it": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637459694
+      }
+    ],
+    "7. Desktop UI: enemy-HP grid categorization": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637462543
+      }
+    ],
+    "8. Desktop UI: models for binary patches": [
+      {
+        "executionId": "83df3c10-defc-4a14-80f8-1902dfaf8a85",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637463687
+      }
+    ],
+    "6. Engine: example / integration tests": [
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637942287
+      }
+    ],
+    "9. Desktop UI: independent binary-patch toggle section": [
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790637943735
+      }
+    ],
+    "12. Desktop UI: confirm seed field first-load population": [
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638020707
+      }
+    ],
+    "10. Desktop UI: carry binary selection into the build": [
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638078323
+      }
+    ],
+    "11. Desktop UI: surface blocked patch in the Result panel": [
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638149382
+      }
+    ],
+    "14. Final verification: combined build with all four options": [
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638595941
+      }
+    ],
+    "15. Documentation: update with honest status labels": [
+      {
+        "executionId": "322d77de-1760-474b-99b5-b6619167358d",
+        "chatSessionId": "sess_03dbee92-144c-45c3-844e-122b01ea90ae",
+        "timestamp": 1790638910179
+      }
+    ]
+  }
+}

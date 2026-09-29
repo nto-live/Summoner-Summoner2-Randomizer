@@ -111,13 +111,25 @@ end up empty. Shipped as transform `chest_items` (option `how`) and folded into 
 The claim "a crate that held a tonic now holds something precious" is measured at the byte level
 and in the document stream, not observed in the running game. See `PLANNED.md` 2.16.
 
-### 1.4 `player_stats_random`, `enemy_stats_random` — the two stat items
+### 1.4 `player_stats_random`, `enemy_stats_random` — the two stat items (+ `enemy_hp_set` split out — **DONE**)
 **Requested as:** "Randomized enemy hp and stats", "Randomized player stats".
 **Mechanism:** shuffle the numeric fields inside `#Character Info` blocks — hostile blocks for the
 enemy side, `$Team: "friendly"` blocks for the playable party — between equal widths only.
 `enemy_difficulty` already *scales* the hostile numbers; this *shuffles* them.
 **Acceptance:** stats move between creatures, widths preserved, and no creature left with values
 that cannot be expressed.
+
+**The enemy-HP half is built — `enemy_hp_set` (NTO Live, 2026-09-28).** The "randomised enemy hp"
+part of the request shipped first as a standalone lever that *sets* every hostile creature's HP to
+one value you choose (default **1**, min 1, max 999), rather than shuffling. It rewrites both
+`$Max Hit Points` and `$Hit Points` in every hostile `#Character Info` block, right-justified inside
+each field's own width (all-9s clamp if it will not fit); HP only — attack, damage and level are
+never touched. It is **independent of `enemy_stats_random`** and reuses `HP_FIELDS`,
+`_fit_int_to_width` and `_set_hp_uniform`. **Measured on the retail disc: 80 hostile creature
+definitions, 160 HP fields rewritten, image byte-identical (size-preserving).** Registered in all
+four registries and exposed as a NumericUpDown in the desktop UI. **Built, unverified** in game.
+The remaining shuffle transforms — `enemy_stats_random` (the rest of the hostile numbers) and
+`player_stats_random` — are still to build.
 
 ### 1.5 `rooms_shuffle` — randomised rooms, safe half
 **Requested as:** "Randomized rooms".
@@ -128,6 +140,26 @@ design fork in `RESEARCH-ENTRANCE-LOGIC.md` §2.
 **Not in scope here:** swapping a level's whole interior with another level's (designed, riskier).
 **Acceptance:** anchors permute within a level and never across levels; every destination anchor
 still exists.
+
+### 1.6 NTO Live — independent UI options, `--binary` flag, `NTO_LIVE_` seed — **DONE**
+**Requested as:** four individually-modifiable randomizer options wired into the desktop app, plus a
+default editable seed carrying the `nto_live` marker (feature `nto-live-randomizer-options`).
+**Built 2026-09-28:**
+* **Four independent desktop options** — doors (`door_destination_remap`), chests (`chest_items`),
+  enemy HP (`enemy_hp_set`, new — see 1.4) and no-start-movie (`skip_intro`, present-but-pending).
+  Doors/chests keep their existing status; enemy HP and the seed are built-unverified;
+  `skip_intro` writes nothing.
+* **`--binary <name>` CLI flag** (repeatable, `src/cli.py`) — exposes binary patches independently
+  of modes, unioned into `binary_spec` and de-duped. The desktop has an independent "Binary patches
+  (executable)" toggle section decoupled from the mode combo and transform grid, and surfaces
+  blocked patches present-but-pending in the Result panel.
+* **`NTO_LIVE_` seed** (`--seeds`) — seeds now take the form `NTO_LIVE_<random uppercase-alnum
+  suffix>` (e.g. `NTO_LIVE_FINAL1`); `--seed-length` controls the suffix length; the desktop seed
+  field is pre-filled on load, stays editable, and the "Random seed" button regenerates it.
+* **Combined build proof** — one ISO built from the retail disc with all four options
+  (`work/out/nto_live_final.iso`, seed `NTO_LIVE_FINAL1`): enemy HP set to 1 (160 fields), doors
+  ~206, chests 33, `skip_intro` `applied: false` BLOCKED; `--verify --against` reports same byte
+  length and changes confined to `TABLES.VPP` (0 bytes outside). See `FEATURES.md` §10.
 
 ---
 
@@ -393,6 +425,7 @@ self-contained and offline)
 | Creatures the game spawns from code (~38 of 80 names) | their stat sheets are in the executable's `.data`, not the text layer |
 | Any edit that grows the archive | the archive-slack question (≈619 KB unused; needs a boot test) |
 | Summoner 2 (any of it) | the VPP v2 reader does not exist |
+| **Skip the startup movie** (`skip_intro`) | **present-but-pending — no longer blocked on the address.** The movie-start call site is now **resolved** in `binary.py` (`va=0x002419C0` → `jr $ra`, delay-slot `li v0,1` at `+0x4`, covering the THQ logo, attract demo and Volition logo). The patch deliberately keeps a `blocked` reason so it writes nothing and reports why; it is exposed as an independent UI toggle and via `--binary skip_intro`. The remaining step is **accepting it for release** (delete the `blocked=` line, then boot-/play-verify) — out of scope for the NTO Live feature (Non-Goal). See **`RESEARCH-SKIP-INTRO.md`**. Host-side (N100) verification — the disc and Ghidra project are there, not in the repo |
 
 ---
 

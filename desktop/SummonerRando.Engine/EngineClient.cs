@@ -80,7 +80,7 @@ public sealed class EngineClient
     public static List<string> BuildArgs(
         string iso, string mode, string seed, string outPath, bool dryRun,
         IEnumerable<string>? include = null, IEnumerable<string>? exclude = null,
-        string? optionsJson = null)
+        string? optionsJson = null, IEnumerable<string>? binary = null)
     {
         var args = new List<string>
         {
@@ -99,6 +99,8 @@ public sealed class EngineClient
             args.Add("--options");
             args.Add(optionsJson!);
         }
+        if (binary is not null)
+            foreach (var b in binary) { args.Add("--binary"); args.Add(b); }
         return args;
     }
 

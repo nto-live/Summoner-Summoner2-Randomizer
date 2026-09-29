@@ -85,6 +85,7 @@ public sealed class BinaryInfo
     public string Help { get; init; } = "";
     public string Va { get; init; } = "";
     public string Expects { get; init; } = "";
+    public string Blocked { get; init; } = "";
 }
 
 public sealed class ListPayload
@@ -222,6 +223,7 @@ public sealed class ListPayload
                     Help = p.Value.Str("help") ?? "",
                     Va = p.Value.Str("va") ?? "",
                     Expects = p.Value.Str("expects") ?? "",
+                    Blocked = p.Value.Str("blocked") ?? "",
                 };
         }
 
@@ -294,6 +296,13 @@ public sealed class BuildReportRow
     public long ImpactBytes { get; init; }
 }
 
+public sealed class BinaryPatchRow
+{
+    public string Patch { get; init; } = "";
+    public bool Applied { get; init; }
+    public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
+}
+
 public sealed class BuildResult
 {
     public bool Dry { get; init; }
@@ -311,6 +320,7 @@ public sealed class BuildResult
     public bool WritesFile { get; init; }
     public IReadOnlyList<string> Transforms { get; init; } = Array.Empty<string>();
     public IReadOnlyList<BuildReportRow> Reports { get; init; } = Array.Empty<BuildReportRow>();
+    public IReadOnlyList<BinaryPatchRow> Binary { get; init; } = Array.Empty<BinaryPatchRow>();
 
     public static BuildResult Parse(JsonElement root)
     {
@@ -336,6 +346,23 @@ public sealed class BuildResult
             }
         }
 
+        var binary = new List<BinaryPatchRow>();
+        if (root.Prop("binary") is JsonElement bs && bs.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var b in bs.EnumerateArray())
+            {
+                var notes = new List<string>();
+                if (b.Prop("notes") is JsonElement bn && bn.ValueKind == JsonValueKind.Array)
+                    notes.AddRange(bn.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!));
+                binary.Add(new BinaryPatchRow
+                {
+                    Patch = b.Str("patch") ?? "",
+                    Applied = b.Bool("applied") ?? false,
+                    Notes = notes,
+                });
+            }
+        }
+
         // build emits "edits"; dry-run emits "edit_total"
         int edits = root.Int("edits") ?? root.Int("edit_total") ?? reports.Sum(r => r.Changed);
 
@@ -356,6 +383,7 @@ public sealed class BuildResult
             WritesFile = root.Bool("writes_file") ?? !(root.Bool("dry") ?? false),
             Transforms = transforms,
             Reports = reports,
+            Binary = binary,
         };
     }
 }

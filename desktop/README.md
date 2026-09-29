@@ -5,7 +5,7 @@ lets you choose what to randomize, and writes a new ISO. **The seed is always
 shown** — it is how runs are shared and compared.
 
 There is no HTTP server and no browser. The app runs the engine
-(`../cli.py`) as a subprocess: JSON in, JSON out, `#progress` lines streamed
+(`../src/cli.py`) as a subprocess: JSON in, JSON out, `#progress` lines streamed
 into the log.
 
 ## Layout
@@ -45,7 +45,7 @@ In order:
 1. `--engine <dir>` on the command line;
 2. `engine.txt` next to the exe (one line: the engine folder path);
 3. the `SUMMONER_RANDO_ENGINE` environment variable;
-4. walking up from the exe's folder looking for `cli.py`.
+4. walking up from the exe's folder looking for `cli.py` (or `src/cli.py`).
 
 Python 3.13 must be on `PATH` (override with `SUMMONER_RANDO_PYTHON`).
 

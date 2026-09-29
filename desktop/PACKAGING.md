@@ -58,17 +58,18 @@ outside the `TABLES.VPP` region.
 1. an explicit override passed to the API,
 2. `engine.txt` next to the app exe, containing a folder path,
 3. `SUMMONER_RANDO_ENGINE`,
-4. walking up from the app's base directory looking for `cli.py`.
+4. walking up from the app's base directory looking for `cli.py` (or `src/cli.py` in the
+   source tree).
 
 Packaging adds one more rule, first: **if `summoner-engine.exe` sits in the resolved engine
 folder, run that instead of `python cli.py`.** So the shipped layout above needs no configuration
-at all, and a developer working from the workspace keeps using `cli.py` + their own Python.
+at all, and a developer working from the workspace keeps using `src/cli.py` + their own Python.
 
 ## 4. Build the bundle
 
 ```powershell
 # 1. freeze the engine (one file, pycdlib bundled)
-python -m PyInstaller --onefile --name summoner-engine --console cli.py
+python -m PyInstaller --onefile --name summoner-engine --console src\cli.py
 
 # 2. publish the app self-contained, single file
 dotnet publish desktop\SummonerRando.Desktop -c Release -r win-x64 --self-contained true `

@@ -6,6 +6,15 @@ session before any of it can be watched happening.
 
 Run `python build.py --list` for the same thing from the terminal.
 
+**NTO Live (2026-09-28).** The desktop UI now exposes four options independently — doors
+(`door_destination_remap`), chests (`chest_items`), enemy HP (`enemy_hp_set`, new) and the
+no-start-movie toggle (`skip_intro`, present-but-pending) — each individually toggleable. Binary
+patches are selectable independently of modes via the repeatable CLI flag `--binary <name>` and an
+independent UI section, decoupled from the mode combo and the transform grid. Generated seeds now
+carry the `NTO_LIVE_` marker (form `NTO_LIVE_<random uppercase-alnum suffix>`, suffix length set by
+`--seed-length`); the desktop seed field is pre-filled with one on load, stays editable, and the
+"Random seed" button regenerates it. All new/changed behaviour is **built, unverified** in game.
+
 ---
 
 ## Requested — the owner's list, organised (2026-09-21)
@@ -46,7 +55,7 @@ of: **exists** (shipped), **build now** (mechanism known, size-preserving, no un
 | **No shops** | re-point the placements that name a `+Shop` character at equal-length non-shopkeepers, so the shop does not exist | **built, unverified** — `shops_none` (86 placements across 46 shopkeepers); note the marker lives on the character's dialogue definition, not `#Character Info` |
 | **Randomized characters** | shuffle `$Character` values between equal lengths — who stands where | **exists** (`npc_character_shuffle`) |
 | **Randomized rooms** | permute what populates a level *within* the level: shuffle `$Start position` anchors between placements of the same kind in the same level, so rooms are furnished differently while the level graph, doors and quests stay intact. This is the safe half of the design fork in `RESEARCH-ENTRANCE-LOGIC.md` §2 | **build now, first version** — `rooms_shuffle`. The deeper version (a level's whole interior swapped with another's) is **designed** |
-| **Randomized enemy hp and stats** | two levers, both shipped separately: `enemy_difficulty` *scales* hit points/aggression/ranges; `creature_stats_shuffle` *shuffles* speed/weight/attack radius. Requested form = shuffle the hostile `#Character Info` numbers themselves | **build now** — `enemy_stats_random` |
+| **Randomized enemy hp and stats** | three levers now: `enemy_hp_set` *sets* every hostile creature's HP to one value you pick (new, NTO Live); `enemy_difficulty` *scales* hit points/aggression/ranges; `creature_stats_shuffle` *shuffles* speed/weight/attack radius. The remaining "shuffle the hostile `#Character Info` numbers themselves" form is `enemy_stats_random` | **partially built** — `enemy_hp_set` **built, unverified** (option `value`, default 1, min 1, max 999; 160 HP fields on the retail disc; separate from `enemy_stats_random`); the full stat shuffle `enemy_stats_random` is still **build now** |
 | **Randomized player stats** | shuffle the numeric fields between **friendly** `#Character Info` blocks (the playable party), equal widths only | **build now** — `player_stats_random` |
 
 ### The build queue this produces
@@ -56,8 +65,9 @@ Ordered by value ÷ risk, all size-preserving:
 1. `enemies_amount` — one dial that covers "how many enemies", "no enemies" and "oops all enemies" — **done**
 2. `shops_free`, `shops_crazy`, `shops_none` — three small, self-contained shop levers — **done**
 3. `chest_items` — real chest randomisation instead of payout shuffling — **done** (40 edits / 474 bytes; the yield is the `+Messagebox:` name, not `+Give:`; measured, not yet watched in game)
-4. `player_stats_random`, `enemy_stats_random` — the two stats items
-5. `rooms_shuffle` — the safe half of the room idea
+4. `enemy_hp_set` — set every hostile creature's HP to a chosen value — **done** (built, unverified; 160 HP fields, size-preserving)
+5. `player_stats_random`, `enemy_stats_random` — the two stats items
+6. `rooms_shuffle` — the safe half of the room idea
 6. **Boss Rush** — needs a boss inventory first
 7. **Collectionthon** — needs a completion mechanism; the reason is recorded, not skipped
 
@@ -113,9 +123,13 @@ Ordered by value ÷ risk, all size-preserving:
 
 1. **The startup movie is NOT addressable from the data layer.** There are **zero `.pss`
    references** in the tables — the intro is played by the executable
-   (`code/vsdk/ps2_movieplayer/mplayer.o`). Skipping it needs an ELF patch or a PSS
-   replacement, not a text edit. `cutscene_bypass` covers the in-game cutscenes, not the
-   boot video.
+   (`code/vsdk/ps2_movieplayer/mplayer.o`). Skipping it needs an ELF patch, not a text edit.
+   `cutscene_bypass` covers the in-game cutscenes, not the boot video. That ELF patch now
+   exists as the `skip_intro` binary patch with the call site resolved (`binary.py`,
+   `va=0x002419C0`), but it is kept **present-but-pending**: it carries a `blocked` reason,
+   writes nothing, and is exposed honestly as an independent UI toggle / `--binary skip_intro`
+   until it is accepted for release (out of scope here). See the "Blocked, with reasons" table
+   and `RESEARCH-SKIP-INTRO.md`.
 2. **`dialogue_blank` removes the reading, not the key press.** Boxes still appear and may
    still need advancing. It empties 2.6 million characters; it cannot change how the
    dialogue system waits.
@@ -235,7 +249,7 @@ reversible, untested in game — treat Hardcore as the boldest mode in the list.
 
 ---
 
-## Transforms (42)
+## Transforms (43)
 
 Edit counts are for one sample seed on the Summoner 1 corpus; shuffle counts move by a
 handful seed to seed. The two dials (`xp_scale`, `levelcap_set`) read 0 at their neutral
@@ -258,6 +272,7 @@ handful seed to seed. The two dials (`xp_scale`, `levelcap_set`) read 0 at their
 | `enemies_random` | which creature stands on each monster placement, `+Level:` | 1,697 |
 | `enemies_swarm` | peaceful placements re-pointed at hostile creatures | 1,783 |
 | `enemy_difficulty` | hostile stats + placement levels scaled | 803 |
+| `enemy_hp_set` | every hostile creature's HP set to one chosen value (option `value`, default 1) — HP only, separate from `enemy_stats_random` | 160 |
 | `music_shuffle` | `$Soundtrack`, `$Sound` | 1,108 |
 | `economy_squeeze` | `$Value` prices up, `+AdjustGP` rewards down | 534 |
 | `icon_shuffle` | `$Icon`, `.vbm` | 481 |
@@ -301,7 +316,7 @@ them, so it appears only in Behaviour Chaos and Total Chaos.
 
 | Idea | Blocked by |
 |---|---|
-| Skip the **startup movie** | not in the data layer — zero `.pss` refs; needs an ELF patch |
+| Skip the **startup movie** (`skip_intro`) | **present-but-pending, not blocked-on-address.** Not in the data layer (zero `.pss` refs), so it is an ELF patch — and the call site is now **resolved** in `binary.py` (`va=0x002419C0` → `jr $ra` + delay-slot `li v0,1`, covering the THQ logo, attract demo and Volition logo). The patch is deliberately kept `blocked` pending sign-off, so it writes nothing and reports why. Exposed as an independent UI toggle and via `--binary skip_intro`. Accepting it for release (delete the `blocked=` line) is out of scope — see `RESEARCH-SKIP-INTRO.md` |
 | Character models | `.mvf` format |
 | Character colours (proper) | `.peg` palettes — though 337 `$Default Material` records do swap |
 | Items in random chests, end to end | chest `+Give` doesn't set `got_ring_of_*`; **Ring of Jade has no grant record anywhere** |

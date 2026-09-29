@@ -27,6 +27,10 @@ public sealed class MainForm : Form
         "xp_boost", "xp_nerf", "xp_scale",
         "levelcap_raise", "levelcap_set",
         "ring_hunt", "permadeath", "economy_squeeze",
+        "enemy_hp_set",
+        // gear + loot + transitions - these change how the game PLAYS, not how it looks
+        "weapon_attack_max", "armor_protect_max", "enemy_drops_random",
+        "door_destination_remap",
     };
 
     private readonly EngineClient? _engine;
@@ -40,6 +44,11 @@ public sealed class MainForm : Form
     private bool _settingOut;
     private readonly Dictionary<string, Dictionary<string, object?>> _optValues = new(StringComparer.Ordinal);
 
+    // Binary (executable) patches are NOT transforms and NOT grid rows. They are an
+    // independent toggle set, decoupled from the mode combo and the transform grid:
+    // switching modes never touches these, and ApplyMode leaves them alone.
+    private readonly HashSet<string> _binarySelected = new(StringComparer.Ordinal);
+
     // controls
     private readonly TextBox _txtIso = new();
     private readonly Button _btnBrowse = new();
@@ -51,6 +60,8 @@ public sealed class MainForm : Form
     private readonly DataGridView _dgv = new();
     private readonly Panel _optScroll = new();
     private readonly TableLayoutPanel _optHost = new();
+    private readonly FlowLayoutPanel _binaryHost = new();
+    private readonly ToolTip _binaryTips = new();
     private readonly TextBox _txtOut = new();
     private readonly Button _btnOut = new();
     private readonly Button _btnDry = new();
@@ -270,8 +281,25 @@ public sealed class MainForm : Form
         _optScroll.Controls.Add(_optHost);
         gbO.Controls.Add(_optScroll);
 
+        // Independent binary-patch toggles, stacked under the Options group in the
+        // right-hand column. Not part of _dgv and not driven by ApplyMode.
+        var gbBin = new GroupBox { Text = "Binary patches (executable)", Dock = DockStyle.Fill };
+        _binaryHost.Dock = DockStyle.Fill;
+        _binaryHost.AutoScroll = true;
+        _binaryHost.FlowDirection = FlowDirection.TopDown;
+        _binaryHost.WrapContents = false;
+        _binaryHost.Padding = new Padding(6);
+        gbBin.Controls.Add(_binaryHost);
+
+        // Right column: Options on top, binary patches below.
+        var rightCol = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        rightCol.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        rightCol.RowStyles.Add(new RowStyle(SizeType.Absolute, 130f));
+        rightCol.Controls.Add(gbO, 0, 0);
+        rightCol.Controls.Add(gbBin, 0, 1);
+
         split.Panel1.Controls.Add(gbF);
-        split.Panel2.Controls.Add(gbO);
+        split.Panel2.Controls.Add(rightCol);
         return split;
     }
 
@@ -420,6 +448,7 @@ public sealed class MainForm : Form
         _cmbMode.Enabled = _cmbMode.Items.Count > 0;
 
         PopulateFeatures();
+        PopulateBinaryPatches();
 
         if (_cmbMode.Items.Count > 0)
             _cmbMode.SelectedIndex = IndexOfMode("vanilla");
@@ -448,6 +477,55 @@ public sealed class MainForm : Form
             var kind = Gameplay.Contains(name) ? "gameplay" : "visual";
             int idx = _dgv.Rows.Add(false, info.Label, kind, info.Description);
             _dgv.Rows[idx].Tag = name;
+        }
+    }
+
+    /// <summary>
+    /// Builds one CheckBox per <c>--list</c> binary-patch entry in the independent
+    /// "Binary patches (executable)" section. These toggles are decoupled from the
+    /// mode combo and the transform grid: ApplyMode never touches them. Blocked
+    /// patches (e.g. skip_intro) are hinted as pending but stay toggleable so the
+    /// user can still request them - the engine refuses them honestly at build time.
+    /// </summary>
+    private void PopulateBinaryPatches()
+    {
+        if (_list is null) return;
+        _binaryHost.Controls.Clear();
+        _binarySelected.Clear();
+
+        foreach (var kv in _list.Binary)
+        {
+            var key = kv.Key;
+            var info = kv.Value;
+            bool blocked = !string.IsNullOrEmpty(info.Blocked);
+
+            var cb = new CheckBox
+            {
+                Text = blocked ? info.Label + " \u2014 pending" : info.Label,
+                Tag = key,
+                AutoSize = true,
+                Checked = false,
+                ForeColor = blocked ? SystemColors.GrayText : SystemColors.ControlText,
+                Margin = new Padding(3, 3, 3, 1),
+            };
+
+            var tip = info.Help ?? "";
+            if (blocked)
+                tip = (tip.Length > 0 ? tip + Environment.NewLine + Environment.NewLine : "") +
+                      "Pending: " + info.Blocked;
+            if (tip.Length > 0)
+                _binaryTips.SetToolTip(cb, tip);
+
+            // Blocked patches remain selectable so the user can request them; the
+            // engine reports them as applied:false with a reason.
+            cb.CheckedChanged += (_, _) =>
+            {
+                if (cb.Tag is not string k) return;
+                if (cb.Checked) _binarySelected.Add(k);
+                else _binarySelected.Remove(k);
+            };
+
+            _binaryHost.Controls.Add(cb);
         }
     }
 
@@ -794,6 +872,7 @@ public sealed class MainForm : Form
         _cmbMode.EndUpdate();
 
         PopulateFeatures();
+        PopulateBinaryPatches();
 
         if (_cmbMode.Items.Count > 0)
             _cmbMode.SelectedIndex = IndexOfMode(modeKey ?? "vanilla");
@@ -908,7 +987,7 @@ public sealed class MainForm : Form
             if (ow != DialogResult.Yes) return;
         }
 
-        var args = EngineClient.BuildArgs(iso, modeKey, seed, outPath, dryRun, include, exclude, optionsJson);
+        var args = EngineClient.BuildArgs(iso, modeKey, seed, outPath, dryRun, include, exclude, optionsJson, binary: _binarySelected);
 
         _txtResult.Text = "";
         _txtLog.Clear();
@@ -994,6 +1073,18 @@ public sealed class MainForm : Form
         }
         if (b.Reports.Count == 0)
             sb.AppendLine("  (no transform reports)");
+
+        if (b.Binary.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Binary patches:");
+            foreach (var row in b.Binary)
+            {
+                var status = row.Applied ? "applied" : "not applied";
+                var note = row.Notes.Count > 0 ? "  \u2014 " + string.Join("; ", row.Notes) : "";
+                sb.AppendLine($"  {row.Patch,-24} {status}{note}");
+            }
+        }
 
         _txtResult.Text = sb.ToString();
         Log($"exit={res.ExitCode}");

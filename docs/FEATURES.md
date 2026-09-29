@@ -6,7 +6,22 @@ bytes) with a fixed seed, and the edit and byte counts are what it actually did.
 `inventory.py`; do not hand-edit the numbers. One row is the exception and says so: the door
 remap's fixture still holds the pre-fix stream, so its numbers come from the disc instead (§0).*
 
-**Counts:** 43 transforms · 34 modes · 9 option-bearing transforms · 6 blocked items.
+**Counts:** 44 transforms · 34 modes · 10 option-bearing transforms · 6 blocked items.
+
+> **NTO Live update 2026-09-28 (feature `nto-live-randomizer-options`).** Four independent
+> randomizer options were wired into the desktop UI and a `NTO_LIVE_` default seed added. A
+> new transform `enemy_hp_set` (§2) sets every hostile creature's HP to a value you pick;
+> doors (`door_destination_remap`) and chests (`chest_items`) are now exposed as independent,
+> individually-toggleable UI options; the `skip_intro` binary patch is surfaced as an
+> independent UI toggle that is **present-but-pending** (§10). A combined build with all four
+> options was produced from the retail disc (`work/out/nto_live_final.iso`, seed
+> `NTO_LIVE_FINAL1`): enemy HP set to 1 rewrote **160 HP fields across 80 hostile creature
+> definitions**, doors ~206 rewrites, chests 33; `skip_intro` reported `applied: false`
+> BLOCKED and wrote nothing. `--verify --against` reports **same byte length** and **changes
+> confined to `TABLES.VPP`** (0 bytes outside the archive). The verify's overall `ok: false`
+> is only the two pre-existing boot-elf identify checks, unrelated to these changes. All new
+> or newly-wired behaviour below is **built, unverified** unless it already carried a stronger
+> status (doors/chests keep theirs).
 
 Status vocabulary, and it is used strictly:
 
@@ -136,6 +151,7 @@ uses a dial must set a value, and mode values are defaults, not overrides.**
 | `enemies_amount` | 4,067 | 12,201 | built, unverified (value `none` excepted) | the enemy-count dial (`none/few/normal/many/all`); value `none` reproduces the verified `enemies_none` byte for byte, so it inherits the 2026-09-22 re-verification; the other four values are still unwatched. Measured at every value below |
 | `enemy_difficulty` | 803 | 1,685 | built, unverified | 51 hostile stat sheets + 293 placement levels; dial `trivial/easy/normal/hard/brutal/deadly/impossible` |
 | `creature_stats_shuffle` | 1,572 | 2,183 | built, unverified | 337 `$Speed`, 337 `$Weight`, 365 `$Attack Radius` |
+| `enemy_hp_set` | 160 | — | built, unverified | **NTO Live.** Sets every hostile creature's HP to one value you choose. Measured on the retail disc: **80** hostile `#Character Info` definitions, **160** HP fields rewritten (`$Max Hit Points` + `$Hit Points`), image **byte-identical** (size-preserving; each value padded right-justified into its own field width, all-9s clamp if it will not fit). HP only — attack, damage and level are never touched. Option `value` (int, default **1**, min 1, max 999). Independent of the `enemy_stats_random` `hp` sub-option — its own standalone lever. In game unverified |
 
 **`enemies_amount` — measured at every value** (retail stream, seed `4242`; every value size-preserving):
 
@@ -215,11 +231,13 @@ does, not a promise.
 | Hardcore | `hardcore` | 13 | — | unverified |
 | Endgame Gate (binary) | `endgame_gate` | 0 (+1 word) | stage=5 | **verified in game** |
 
-## 6. Options (8 option-bearing transforms)
+## 6. Options (10 option-bearing transforms)
 
 | Transform | Option | Values | Default |
 |---|---|---|---|
 | `door_destination_remap` | `how` | shuffle · swap · off | shuffle |
+| `enemy_hp_set` | `value` | 1…999 hit points | 1 |
+| `chest_items` | `how` | shuffle · swap | shuffle |
 | `enemy_difficulty` | `level` | trivial · easy · normal · hard · brutal · deadly · impossible | normal |
 | `enemy_difficulty` | `level_shift` | −20…+20 creature levels | 0 |
 | `enemies_none` | `how` | navpoint · both · team *(blocked)* | navpoint |
@@ -273,9 +291,55 @@ owner's list, organised"**. The work order below is mostly built now:
 
 * **Built (unverified)** — `enemies_amount` (4,067 at `none` / 2,852 at `few` / 0 at `normal` / 872 at `many` / 1,783 at `all`), `shops_free` (477), `shops_crazy` (479), `shops_none` (86). These are in the measured
   catalogue above; none of them has been watched in game yet.
+* **Built (unverified) — NTO Live** — `enemy_hp_set` (the "randomised enemy hp" lever, one settable
+  value; 160 HP fields on the retail disc; §2). The full `enemy_stats_random` shuffle is still to build.
 * **Still to build** — `player_stats_random`, `enemy_stats_random`, `rooms_shuffle`
   (all mechanism-known), plus **Boss Rush / NPC Hunt (cross-level)** which need an inventory first,
   and **Collectionthon** which stays blocked with its reason (the game has no collection counter).
 
 Work order, value ÷ risk: ~~`enemies_amount` → the three shop levers → `chest_items`~~ *(all three
-built)* → the two stat transforms → `rooms_shuffle` → Boss Rush → Collectionthon.
+built)* → ~~enemy hp lever~~ *(`enemy_hp_set` built)* → the two stat transforms → `rooms_shuffle` →
+Boss Rush → Collectionthon.
+
+---
+
+## 10. NTO Live — desktop UI options, the `--binary` flag, and the seed (2026-09-28)
+
+The `nto-live-randomizer-options` feature made four options individually toggleable in the WinForms
+desktop app (`desktop/SummonerRando.Desktop/MainForm.cs`) and gave the CLI two related capabilities.
+Everything here is **built, unverified** in game (the desktop grid/toggles are code-verified; the
+in-game effects inherit each transform's own status above).
+
+**Four independent options, one build:**
+
+| Option | Backed by | UI surface | Status |
+|---|---|---|---|
+| Doors | `door_destination_remap` (existing) | independent grid toggle + `how` option control | **verified in game** — forced gates (unchanged; now wired as its own UI option) |
+| Chests | `chest_items` (existing) | independent grid toggle + `how` option control | **play-verified at the record level**, grant unverified (unchanged; now its own UI option) |
+| Enemy HP | `enemy_hp_set` (**new**) | independent grid toggle + NumericUpDown (default 1) | **built, unverified** |
+| No start movie | `skip_intro` binary patch | independent "Binary patches (executable)" toggle, decoupled from the mode combo and the transform grid | **present-but-pending** — see below |
+
+Doors and chests are ordinary transforms that now appear as their own toggleable rows; enemy HP
+auto-renders a NumericUpDown from its int option schema.
+
+**New CLI flag `--binary <name>` (repeatable), `src/cli.py`.** Exposes binary patches independently
+of modes: names are unioned into `binary_spec` on top of whatever the mode contributes and de-duped
+by patch name. This is how the desktop's independent binary toggle reaches the engine (e.g.
+`--binary skip_intro`) under the default `custom` mode, with no mode selected. The desktop surfaces
+any blocked patch present-but-pending in the Result panel.
+
+**`NTO_LIVE_` seed (`src/cli.py --seeds`).** Generated seeds now take the form
+`NTO_LIVE_<random uppercase-alnum suffix>` (e.g. `NTO_LIVE_FINAL1`); `--seed-length` controls the
+suffix length. The desktop seed field is pre-populated with an `NTO_LIVE_` seed on load, stays
+user-editable, and the "Random seed" button regenerates one. **Built, unverified.**
+
+**`skip_intro` — present-but-pending, stated precisely.** The call-site addresses are now resolved
+and sit in `src/binary.py`: `va=0x002419C0` patched to `jr $ra` (return immediately) with a
+delay-slot `li v0,1` at `+0x4`, which neutralises the movie-player routine and covers the THQ logo,
+the attract demo, and the Volition logo in one shot. **But the patch carries a `blocked` reason**
+("movie-start call site resolved but not accepted for release; present but pending sign-off"), so
+`apply_patches` refuses it — it writes **zero bytes** and reports `applied: false` BLOCKED. The
+feature is exposed honestly (it appears in `--list` and as a UI toggle) and does nothing until
+someone accepts it by deleting the `blocked=` line. **Resolving/accepting it for release is out of
+scope for this feature (Non-Goal).** Do not read this as verified or working: it is
+present-but-pending. See `docs/RESEARCH-SKIP-INTRO.md`.

@@ -138,17 +138,27 @@ def va_to_iso_offset(va: int, loc: ElfLocation) -> int:
 class Patch:
     """One named binary edit.
 
-    `va`        virtual address of the instruction
+    `va`        virtual address of the instruction, or None if not yet resolved
     `original`  the 4 bytes we EXPECT there (refuse otherwise)
     `encode`    (params) -> new 4-byte instruction
+    `blocked`   a reason string when the patch is known-but-unresolved. Such a patch is
+                listed in the catalogue and always refuses (never writes) — so a feature
+                can be exposed honestly before its address has been found, instead of
+                guessing an address and risking a live-call corruption.
     """
     name: str
-    va: int
+    va: int | None
     original: int
     encode: object
     label: str
     help: str
     params: dict = field(default_factory=dict)
+    blocked: str | None = None
+    # Some patches need to rewrite more than one instruction (e.g. an early-return is
+    # `jr $ra` + a delay-slot word). `extra` lists additional words as
+    # (byte_delta_from_va, expected_original, new_word). Each is verified and refused on
+    # mismatch exactly like the primary word, so the safety guarantee is unchanged.
+    extra: list = field(default_factory=list)
 
 
 def enc_slti(rs: int, rt: int, imm: int) -> int:
@@ -173,6 +183,48 @@ PATCHES: dict[str, Patch] = {
         label="Endgame gate stage",
         help="the gamestage threshold that arms the ending. Lower = ending available earlier.",
         params={"stage": {"type": "int", "default": 5, "min": 1, "max": 30}},
+    ),
+    # Skip the boot movie. The intro is NOT in the data layer - there are zero `.pss`
+    # references in TABLES.VPP; the video is played by the executable itself
+    # (`code/vsdk/ps2_movieplayer/mplayer.o`, per MODES.md / docs/FEATURES.md §7). So this
+    # is a binary patch.
+    #
+    # RESOLVED in the Ghidra R5900 project (SLUS_200.74, r5900:LE:32), then corrected after a
+    # boot test still showed the movies. The movie player is FUN @ 0x002419C0 (opens/plays a
+    # .pss). There are exactly FOUR calls to it, all on the boot logo path:
+    #   0x00227E00 (thqlogo.pss)  in FUN_00227DC8
+    #   0x00227EC8 (demo.pss)     in FUN_00227E88
+    #   0x00227EE0 (thqlogo.pss)  in FUN_00227E88   (which then tail-jumps into FUN_00227DC8)
+    #   0x0023FA6C (geeks.pss)    in FUN_0023F9B8
+    # Those wrappers are reached from TWO boot state machines (0x0022A1C0 and 0x0022A428), so
+    # no-op-ing a single dispatch slot (the first attempt at 0x0022A2C8) did NOT stop playback.
+    #
+    # The robust fix is at the single choke point: make the movie player return immediately with a
+    # non-zero status. Every caller does `bne v0, zero, <skip the rest>` after the call, i.e. a
+    # non-zero return means "handled, move on". So overwriting the player's first two instructions
+    # with `jr $ra` + `li v0,1` makes all four call sites a no-op that returns "done" without
+    # opening any video. One function patched, every path covered, arguments in the delay slots
+    # become harmless dead computation.
+    #   0x002419C0: 0x27BDFEF0 (addiu sp,sp,-0x110)  -> 0x03E00008 (jr $ra)
+    #   0x002419C4: 0xFFB400B0 (sd s4,0xB0(sp))      -> 0x24020001 (li v0,1)  [delay slot]
+    # Both originals verified byte-for-byte against the retail ISO. Covers the THQ logo, the
+    # attract demo, AND the Volition "geeks" logo.
+    "skip_intro": Patch(
+        name="skip_intro",
+        va=0x002419C0,
+        original=0x27BDFEF0,           # addiu sp,sp,-0x110  (movie player prologue)
+        encode=lambda p: 0x03E00008,   # jr $ra  -> return immediately
+        extra=[
+            # delay slot: li v0,1 so callers see a non-zero "handled" status and skip playback
+            (0x4, 0xFFB400B0, 0x24020001),
+        ],
+        label="Skip the startup movie",
+        help="Stops the boot/intro videos (THQ logo, attract demo, and Volition logo) from "
+             "playing. Executable-side: the intro is not in the script layer (zero .pss refs), so "
+             "this is an ELF patch. It makes the movie-player routine return immediately, which "
+             "neutralises every boot-movie call at once. NOTE: this removes the .pss FMV logos; "
+             "the in-engine story cinematic is a separate $Cutscene and is NOT removed by this "
+             "patch (neutering it hangs the boot).",
     ),
 }
 
@@ -199,42 +251,82 @@ def apply_patches(iso: Path, patches: list[tuple[str, dict]], progress=None) -> 
                 results.append({"patch": name, "applied": False,
                                 "notes": ["unknown patch"]})
                 continue
-            off = va_to_iso_offset(p.va, loc)
-            fh.seek(off)
-            before = struct.unpack("<I", fh.read(4))[0]
-            if before != p.original:
+            if p.blocked or p.va is None:
                 results.append({
-                    "patch": name, "applied": False, "va": f"0x{p.va:08X}",
-                    "notes": [f"REFUSED: expected 0x{p.original:08X} at 0x{p.va:08X}, "
-                              f"found 0x{before:08X}. Wrong disc revision or wrong address."],
+                    "patch": name, "applied": False,
+                    "notes": [f"BLOCKED: {p.blocked or 'address not resolved'}. "
+                              f"Nothing was written."],
                 })
                 continue
-            new = p.encode(params)
-            fh.seek(off)
-            fh.write(struct.pack("<I", new))
-            fh.flush()
-            # verify
-            fh.seek(off)
-            after = struct.unpack("<I", fh.read(4))[0]
-            ok = after == new
-            say(f"{name}: 0x{before:08X} -> 0x{new:08X} at 0x{p.va:08X}"
-                f"{' (verified)' if ok else ' (VERIFY FAILED)'}")
+            # Build the full list of words this patch writes: the primary word, then any
+            # `extra` words. Each entry is (va, expected_original, new_word).
+            words = [(p.va, p.original, p.encode(params))]
+            for delta, orig, neww in p.extra:
+                words.append((p.va + delta, orig, neww))
+
+            # First pass: read and verify EVERY expected original before writing anything.
+            # If any word mismatches, refuse the whole patch and leave the disc untouched.
+            refused = None
+            reads = []
+            for wva, worig, _wnew in words:
+                woff = va_to_iso_offset(wva, loc)
+                fh.seek(woff)
+                wbefore = struct.unpack("<I", fh.read(4))[0]
+                reads.append((wva, woff, wbefore))
+                if wbefore != worig:
+                    refused = (f"REFUSED: expected 0x{worig:08X} at 0x{wva:08X}, "
+                               f"found 0x{wbefore:08X}. Wrong disc revision or wrong address.")
+                    break
+            if refused:
+                results.append({
+                    "patch": name, "applied": False, "va": f"0x{p.va:08X}",
+                    "notes": [refused],
+                })
+                continue
+
+            # Second pass: write and verify each word.
+            changes = []
+            all_ok = True
+            for (wva, worig, wnew), (_v, woff, wbefore) in zip(words, reads):
+                fh.seek(woff)
+                fh.write(struct.pack("<I", wnew))
+                fh.flush()
+                fh.seek(woff)
+                wafter = struct.unpack("<I", fh.read(4))[0]
+                ok = wafter == wnew
+                all_ok = all_ok and ok
+                say(f"{name}: 0x{wbefore:08X} -> 0x{wnew:08X} at 0x{wva:08X}"
+                    f"{' (verified)' if ok else ' (VERIFY FAILED)'}")
+                changes.append({
+                    "va": f"0x{wva:08X}", "iso_offset": f"0x{woff:X}",
+                    "before": f"0x{wbefore:08X}", "after": f"0x{wafter:08X}", "ok": ok,
+                })
+
+            first = changes[0]
             results.append({
-                "patch": name, "applied": ok, "va": f"0x{p.va:08X}",
-                "iso_offset": f"0x{off:X}",
-                "before": f"0x{before:08X}", "after": f"0x{after:08X}",
-                "notes": [p.label, p.help] + ([] if ok else ["VERIFY FAILED"]),
+                "patch": name, "applied": all_ok, "va": f"0x{p.va:08X}",
+                "iso_offset": first["iso_offset"],
+                "before": first["before"], "after": first["after"],
+                "words": changes,
+                "notes": [p.label, p.help] + ([] if all_ok else ["VERIFY FAILED"]),
             })
     return {"elf": loc.as_dict(), "patches": results}
 
 
 def describe() -> dict:
     """Catalogue of binary patches, for the UI."""
-    return {
-        name: {"label": p.label, "help": p.help, "va": f"0x{p.va:08X}",
-               "expects": f"0x{p.original:08X}", "params": p.params}
-        for name, p in PATCHES.items()
-    }
+    out = {}
+    for name, p in PATCHES.items():
+        entry = {
+            "label": p.label, "help": p.help,
+            "va": (f"0x{p.va:08X}" if p.va is not None else None),
+            "expects": (f"0x{p.original:08X}" if p.va is not None else None),
+            "params": p.params,
+        }
+        if p.blocked:
+            entry["blocked"] = p.blocked
+        out[name] = entry
+    return out
 
 
 if __name__ == "__main__":

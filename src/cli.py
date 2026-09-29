@@ -270,12 +270,16 @@ def cmd_verify(iso_path: str, against: str | None = None) -> int:
 def cmd_seeds(n: int, length: int = 6) -> int:
     alpha = string.ascii_uppercase + string.digits
     rng = random.SystemRandom()
-    _emit({"seeds": ["".join(rng.choice(alpha) for _ in range(length))
-                     for _ in range(max(1, n))]})
+    width = max(1, length)
+
+    def one() -> str:
+        return "NTO_LIVE_" + "".join(rng.choice(alpha) for _ in range(width))
+
+    _emit({"seeds": [one() for _ in range(max(1, n))]})
     return 0
 
 
-def _resolve(mode: str, transforms, include, exclude):
+def _resolve(mode: str, transforms, include, exclude, binary_names=None):
     tf = list(rc.MODES[mode]["transforms"]) if mode in rc.MODES else list(transforms or [])
     for t in list(exclude or []):
         if t in tf:
@@ -283,7 +287,12 @@ def _resolve(mode: str, transforms, include, exclude):
     for t in list(include or []):
         if t not in tf:
             tf.append(t)
-    binary = rc.MODES.get(mode, {}).get("binary") or []
+    binary = list(rc.MODES.get(mode, {}).get("binary") or [])
+    have = {n for n, _ in binary}
+    for name in (binary_names or []):
+        if name not in have:
+            binary.append([name, {}])
+            have.add(name)
     return tf, binary
 
 
@@ -298,7 +307,7 @@ def cmd_build(a) -> int:
         _emit({"error": info.reason, "game": info.game, "supported": False})
         return 2
 
-    tf, binary_spec = _resolve(a.mode, a.transforms, a.include, a.exclude)
+    tf, binary_spec = _resolve(a.mode, a.transforms, a.include, a.exclude, a.binary)
     # Mode defaults first, explicit --options on top. Without this a mode like `progression`
     # (which ships {"xp_scale": {"percent": 200}}) silently ran at 100% - i.e. did nothing.
     options = rc.mode_options(a.mode, json.loads(a.options) if a.options else {})
@@ -344,6 +353,8 @@ def main() -> int:
     ap.add_argument("--include", action="append", default=[])
     ap.add_argument("--exclude", action="append", default=[])
     ap.add_argument("--exclude-permadeath", action="store_true")
+    ap.add_argument("--binary", action="append", default=[],
+                    help="binary patch name (repeatable); independent of --mode")
     ap.add_argument("--options", help="JSON object")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--verify", help="check a built (or any) disc image")

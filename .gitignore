@@ -247,3 +247,21 @@ desktop/_capture.png
 # dev scratch: UI-tree dumps and layout renders from building the app
 desktop/_ui/
 
+
+# Ghidra reverse-engineering project (external tooling, not source)
+ghidra-ee/
+*.gpr
+*.rep/
+SummonerEE.rep/
+
+# --- Randomizer run outputs & lab scratch: generated, never source ----------------
+# CLI/report JSON written by builds, verifies and dry-runs at the repo root.
+/build.json
+/build_final.json
+/dryrun.json
+/verify.json
+/verify_final.json
+out.json
+*-report.json
+# headless emulator boot logs captured by the lab rig
+docs/lab/logs/

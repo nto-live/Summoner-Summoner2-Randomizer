@@ -29,8 +29,14 @@ public static class EngineLocator
             try
             {
                 var full = Path.GetFullPath(candidate!);
+                // The engine may sit in the folder itself (frozen bundle, or an engine.txt that
+                // points straight at it) or in its "src" child (the source tree, where cli.py
+                // lives under src/ while the app is published elsewhere).
                 if (File.Exists(Path.Combine(full, CliFileName)) || HasFrozenEngine(full))
                     return full;
+                var src = Path.Combine(full, "src");
+                if (File.Exists(Path.Combine(src, CliFileName)))
+                    return src;
             }
             catch
             {

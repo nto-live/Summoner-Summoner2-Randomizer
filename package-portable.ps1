@@ -27,7 +27,7 @@ if (-not $SkipFreeze) {
             --distpath $stage `
             --workpath (Join-Path $repo "work\pyi-build") `
             --specpath (Join-Path $repo "work\pyi-spec") `
-            --collect-submodules pycdlib --noconfirm cli.py | Out-Null
+            --collect-submodules pycdlib --noconfirm (Join-Path $repo "src\cli.py") | Out-Null
     } finally {
         Pop-Location
     }

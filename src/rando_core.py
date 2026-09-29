@@ -1035,6 +1035,18 @@ _SHUFFLE_SPECS: dict[str, list[tuple[bytes, str]]] = {
         (rb'\$Speedup rate:\s*([0-9.]+)', "$Speedup rate"),
         (rb'\$Slowdown rate:\s*([0-9.]+)', "$Slowdown rate"),
     ],
+    # 143 — what a slain enemy drops. `+Drop: "Item Name" <weight>` — shuffle WHICH item
+    # each drop entry yields (among equal-length names), leaving the drop-chance weight
+    # alone. Enemies now drop different loot; size-preserving, no item is invented or lost.
+    "enemy_drops_random": [
+        (rb'\+Drop:\s*"([^"]+)"', "+Drop item"),
+    ],
+    # 77 — the background MUSIC only ($Soundtrack), NOT sound effects. The wrong track plays
+    # in the wrong place, but heal still sounds like heal. (music_shuffle scrambles $Sound too,
+    # i.e. SFX as well; this is the music-only lever.)
+    "music_tracks_shuffle": [
+        (rb'\$Soundtrack:\s*"([^"]+)"', "$Soundtrack"),
+    ],
 }
 
 
@@ -1246,13 +1258,25 @@ def _analyse_enemies(blob: bytes):
 
 def _hostile_char_blocks(blob: bytes):
     """(start, end) for every `#Character Info` block whose `$Team:` is hostile."""
+    return _char_info_blocks(blob, HOSTILE_TEAMS)
+
+
+def _char_info_blocks(blob: bytes, teams):
+    """(start, end) for every `#Character Info` block whose `$Team:` is in `teams`.
+
+    A block runs from just after its `#Character Info` header to the START of the next
+    section of ANY kind — the next `\\n#...`, including the next `#Character Info`. The
+    earlier rule skipped over following `#Character Info` headers, which let one block's
+    range swallow the blocks after it and mis-attribute their fields; anchoring on the
+    next `\\n#` keeps each block's fields its own.
+    """
     out = []
     for m in re.finditer(rb"#Character Info", blob):
         s = m.end()
-        nxt = re.search(rb"\n#(?!Character Info)", blob[s:])
+        nxt = re.search(rb"\n#", blob[s:])
         e = s + (nxt.start() if nxt else 3000)
         t = TEAM_RE.search(blob[s:e])
-        if t and t.group(2) in HOSTILE_TEAMS:
+        if t and t.group(2) in teams:
             out.append((s, e))
     return out
 
@@ -1581,6 +1605,425 @@ def t_enemy_difficulty(blob, rng, level="normal", level_shift=0):
 
 
 # --------------------------------------------------------------------------- #
+# Creature stats — SHUFFLE (not scale). enemy_difficulty scales hostile numbers;
+# these two move them between creatures instead, hostile and friendly kept apart.
+#
+# Mechanism: every numeric field in CREATURE_NUM_FIELDS / CREATURE_FLOAT_FIELDS,
+# collected across one side's `#Character Info` blocks, is permuted among the other
+# creatures on that same side. Size-preserving by construction — see the two styles.
+#
+#   style="floor" (default) — permute values only within their own byte-width class,
+#       per field. Width IS the magnitude tier here, so a three-digit boss HP can only
+#       land on another three-digit HP: the top class stays the top class, and a boss
+#       never wakes up with 15 HP. This is the honest reading of "randomized stats".
+#   style="pure" — permute a field's values across ALL widths, writing each back only
+#       where it still fits (right-justified, never grown). A small value CAN drop into
+#       a big field, so a boss can end up paper-thin. Funnier, riskier; opt-in.
+#
+# Both shuffle each SIDE separately: the party's numbers stay in the party, the
+# hostiles' stay hostile, so the two items are genuinely distinct features.
+# --------------------------------------------------------------------------- #
+FRIENDLY_TEAMS = {b"friendly"}
+STAT_STYLES = ("floor", "pure")
+
+
+def _friendly_char_blocks(blob: bytes):
+    """(start, end) for every `#Character Info` block whose `$Team:` is friendly.
+
+    The mirror of `_hostile_char_blocks`: same block bounds, opposite team filter, so
+    the playable party is selected the same way the enemy side is.
+    """
+    return _char_info_blocks(blob, FRIENDLY_TEAMS)
+
+
+def _shuffle_stats_in_blocks(blob: bytes, rng: Random, blocks, style: str, rep: Report) -> bytes:
+    """Shuffle every creature stat field among the given blocks, size-preserving.
+
+    For each field regex, gathers (absolute_offset, value) across all `blocks`, then:
+      * floor — permutes the values inside each byte-width group (a value never changes
+        width, so it never leaves its magnitude tier);
+      * pure  — permutes the values across all widths, but writes a chosen value back
+        only where it fits the destination field width, right-justified for integers
+        and width-matched for floats; anything that will not fit falls back to a
+        same-width pick, so the stream can never grow.
+    Returns the edited blob and fills `rep` with the per-field counts.
+    """
+    out = bytearray(blob)
+    is_float = {rx: True for rx in CREATURE_FLOAT_FIELDS}
+    total = 0
+    for rx in CREATURE_NUM_FIELDS + CREATURE_FLOAT_FIELDS:
+        occ = []  # (abs_start, abs_end, value)
+        for s, e in blocks:
+            seg = bytes(out[s:e])
+            for m in re.finditer(rx, seg):
+                occ.append((s + m.start(2), s + m.end(2), m.group(2)))
+        if len(occ) < 2:
+            continue
+        vals = [v for _, _, v in occ]
+        if style == "pure":
+            new_vals = _pure_assign(occ, rng)
+        else:
+            new_vals = _floor_assign(occ, rng)
+        changed = 0
+        for (a, b, old), new in zip(occ, new_vals):
+            if new is not None and new != old and len(new) == (b - a):
+                out[a:b] = new
+                changed += 1
+        if changed:
+            label = rx.split(b"\\")[0].decode("latin-1", "ignore").lstrip("(").lstrip("$")
+            rep.notes.append(f"{label or 'field'}: {len(occ)} values, {changed} moved")
+        total += changed
+    rep.changed += total
+    return bytes(out)
+
+
+def _floor_assign(occ, rng: Random):
+    """Permute values inside each byte-width group; every value keeps its width."""
+    by_w: dict[int, list[int]] = {}
+    for i, (_, _, v) in enumerate(occ):
+        by_w.setdefault(len(v), []).append(i)
+    new = [None] * len(occ)
+    for _, idxs in by_w.items():
+        if len(idxs) < 2:
+            new[idxs[0]] = occ[idxs[0]][2] if idxs else None
+            continue
+        vals = [occ[i][2] for i in idxs]
+        shuf = vals[:]
+        rng.shuffle(shuf)
+        for i, v in zip(idxs, shuf):
+            new[i] = v
+    return new
+
+
+def _pure_assign(occ, rng: Random):
+    """Permute values across ALL widths; write back only where the value fits.
+
+    A shorter value is right-justified into a wider field (a small number CAN land in a
+    boss's field — that is the point of pure). A longer value cannot fit a narrower field,
+    so those positions keep a same-width value instead, and the stream never grows.
+    """
+    n = len(occ)
+    order = list(range(n))
+    rng.shuffle(order)
+    new = [None] * n
+    # width-bucketed fallbacks so a non-fitting pick can still be filled same-width
+    by_w: dict[int, list[bytes]] = {}
+    for _, _, v in occ:
+        by_w.setdefault(len(v), []).append(v)
+    for w in by_w:
+        rng.shuffle(by_w[w])
+    for dst, src in zip(range(n), order):
+        a, b, _ = occ[dst]
+        width = b - a
+        cand = occ[src][2]
+        if len(cand) <= width:
+            is_float = b"." in cand
+            if is_float:
+                # only reuse a float in an equal-width float field to keep the decimal shape
+                new[dst] = cand if len(cand) == width else None
+            else:
+                new[dst] = cand.rjust(width, b" ") if width != len(cand) else cand
+        if new[dst] is None:
+            pool = by_w.get(width)
+            new[dst] = pool.pop() if pool else occ[dst][2]
+    return new
+
+
+# Both `$Max Hit Points` and the current `$Hit Points` carry the HP number; the "one HP"
+# lever writes the same value into both so a creature cannot heal back above it.
+HP_FIELDS = (
+    rb"(\$Max Hit Points\s*:\s*)(\d+)",
+    rb"(\$Hit Points\s*:\s*)(\d+)",
+)
+
+
+def _parse_hp_option(hp) -> int | None:
+    """Turn the `hp` option into a fixed value, or None to mean 'leave HP in the shuffle'.
+
+    'shuffle' (or blank) -> None; 'one' -> 1; a numeric string/int -> that number (>=1).
+    Anything else -> None, so an unrecognised value degrades to the normal shuffle rather
+    than doing something surprising.
+    """
+    if hp is None:
+        return None
+    s = str(hp).strip().lower()
+    if s in ("", "shuffle"):
+        return None
+    if s == "one":
+        return 1
+    try:
+        return max(1, int(s))
+    except ValueError:
+        return None
+
+
+def _fit_int_to_width(value: int, width: int) -> bytes:
+    """The integer `value` written into a field of exactly `width` bytes, size-preserving.
+
+    Padded with leading spaces (the game parses the number, not the padding). A value too
+    large for the field is clamped to that field's all-nines maximum, so nothing ever grows.
+    """
+    v = max(0, value)
+    hi = int("9" * width)
+    v = min(v, hi)
+    return str(v).encode().rjust(width, b" ")
+
+
+def _set_hp_uniform(blob: bytes, blocks, value: int, rep: Report) -> bytes:
+    """Set every HP field in `blocks` to `value`, each written inside its own field width.
+
+    This is the "all enemies at one HP" lever. HP fields come in several byte widths
+    (w2 / w3 / w4 on the hostile side), and the size rule forbids changing a field's
+    length — so the value is right-justified into whatever width each field already has,
+    and clamped down if it will not fit. Reversible field-by-field, nothing shifts.
+    """
+    out = bytearray(blob)
+    hits = 0
+    for s, e in blocks:
+        seg = bytes(out[s:e])
+        for rx in HP_FIELDS:
+            for m in re.finditer(rx, seg):
+                width = len(m.group(2))
+                new = _fit_int_to_width(value, width)
+                if new != m.group(2):
+                    a = s + m.start(2)
+                    out[a:a + width] = new
+                    hits += 1
+    rep.changed += hits
+    rep.notes.append(f"{hits} HP fields set to {value} (padded to each field's own width)")
+    return bytes(out)
+
+
+def t_enemy_stats_random(blob, rng, style="floor", hp="shuffle"):
+    """Shuffle the hostile creatures' own numbers between each other — or flatten their HP.
+
+    Randomized enemy HP and stats: every numeric field in the hostile `#Character Info`
+    blocks — hit points, ability points, aggressiveness, attack radius, view/detection
+    range, movement rates — is permuted among the other hostiles. `enemy_difficulty`
+    *scales* these; this *shuffles* them, so the mix changes without the average moving.
+
+    style='floor' (default) keeps every value in its own byte-width class, so a boss stays
+    a boss; style='pure' lets values cross widths where they fit, so a boss can end up
+    weak. Only the hostile side is touched. Size-preserving.
+
+    hp='one' overrides the shuffle and sets EVERY hostile HP field to 1 (a one-hit-kill
+    run); hp='<number>' sets them all to that number, clamped to each field's own width;
+    hp='shuffle' (default) leaves HP in the stat shuffle. Because HP fields differ in byte
+    width, a uniform value is padded into each field rather than changing its length.
+    """
+    rep = Report("enemy_stats_random")
+    style = str(style)
+    if style not in STAT_STYLES:
+        rep.notes.append(f"unknown style {style!r} - pick one of {list(STAT_STYLES)}; "
+                         f"nothing changed")
+        return blob, rep
+    blocks = _hostile_char_blocks(blob)
+    if len(blocks) < 2:
+        rep.notes.append(f"only {len(blocks)} hostile #Character Info block(s) - nothing to shuffle")
+        return blob, rep
+
+    # "all enemies at one HP" — a fixed value wins over the shuffle for the HP fields.
+    hp_value = _parse_hp_option(hp)
+    if hp_value is not None:
+        out = _set_hp_uniform(blob, blocks, hp_value, rep)
+        rep.notes.insert(0, f"{len(blocks)} hostile creature definitions, hp={hp_value} (uniform)")
+        rep.notes.append("every hostile HP flattened; other stats left as vanilla")
+        rep.notes.append("size-preserving; each HP written inside its own field width")
+        return out, rep
+
+    out = _shuffle_stats_in_blocks(blob, rng, blocks, style, rep)
+    rep.notes.insert(0, f"{len(blocks)} hostile creature definitions, style={style}")
+    rep.notes.append("hostiles shuffled among themselves only; friendly side untouched")
+    rep.notes.append("size-preserving; every value rewritten inside a field of its own width")
+    return out, rep
+
+
+def t_player_stats_random(blob, rng, style="floor"):
+    """Shuffle the playable party's numbers between each other.
+
+    Randomized player stats: the same numeric fields as the enemy version, but taken from
+    the `$Team: "friendly"` `#Character Info` blocks — the party — and permuted among
+    themselves. There is no Strength/Dexterity/Intelligence in this game; "player stats"
+    means HP, ability points, aggression, attack radius, field-of-view, detection and the
+    speed-up / slow-down rates.
+
+    style='floor' (default) keeps each value in its own byte-width class; style='pure'
+    lets them cross widths where they fit. Only the friendly side is touched.
+    Size-preserving.
+    """
+    rep = Report("player_stats_random")
+    style = str(style)
+    if style not in STAT_STYLES:
+        rep.notes.append(f"unknown style {style!r} - pick one of {list(STAT_STYLES)}; "
+                         f"nothing changed")
+        return blob, rep
+    blocks = _friendly_char_blocks(blob)
+    if len(blocks) < 2:
+        rep.notes.append(f"only {len(blocks)} friendly #Character Info block(s) - nothing to shuffle")
+        return blob, rep
+    out = _shuffle_stats_in_blocks(blob, rng, blocks, style, rep)
+    rep.notes.insert(0, f"{len(blocks)} friendly creature definitions, style={style}")
+    rep.notes.append("party shuffled among themselves only; hostile side untouched")
+    rep.notes.append("size-preserving; every value rewritten inside a field of its own width")
+    return out, rep
+
+
+def t_enemy_hp_set(blob, rng, value=1):
+    """Set EVERY hostile creature's HP fields to a single user-chosen value.
+
+    Standalone size-preserving lever, independent of enemy_stats_random's bundled
+    `hp` option. Writes the same number into each $Max Hit Points and $Hit Points
+    of every hostile #Character Info block, right-justified inside the field's own
+    byte width (all-9s clamp if the value will not fit). HP only — attack, damage
+    and level fields are never touched. rng is unused: the value is deterministic.
+    """
+    rep = Report("enemy_hp_set")
+    try:
+        v = max(1, int(value))
+    except (TypeError, ValueError):
+        rep.notes.append(f"unusable value {value!r} - refused, nothing changed")
+        return blob, rep
+    blocks = _hostile_char_blocks(blob)
+    if not blocks:
+        rep.notes.append("no hostile #Character Info blocks found - nothing changed")
+        return blob, rep
+    out = _set_hp_uniform(blob, blocks, v, rep)
+    rep.notes.insert(0, f"{len(blocks)} hostile creature definitions, hp set to {v}")
+    rep.notes.append("HP only; attack/damage/level untouched")
+    rep.notes.append("size-preserving; each HP written inside its own field width")
+    return out, rep
+
+
+# --------------------------------------------------------------------------- #
+# Gear stats - weapon $Damage and armour $Protection
+#
+# These fields live on ITEM records, NOT on creatures. Two record shapes matter:
+#
+#   $Type:  "weapon"                 <- (or "Weapon") a weapon item
+#     $Skill:  "sword weapons"
+#     $Class:  "swords"
+#     $Damage: 35                    <- attack power  (also creatures carry $Damage,
+#     $Damage Type: "..."               so we ONLY touch $Damage that is followed by
+#                                       a $Damage Type line, which is a weapon marker)
+#
+#   $Armor:                          <- an armour item record header
+#     $Name:  "leather cap"
+#     $Protection: 8                 <- defence  (creatures also carry $Protection inside
+#     $Ore: 0                           #Character Info; we scope armour by requiring the
+#                                       nearest preceding "$Armor:" header)
+#
+# Both edits are size-preserving: the number is right-justified into the field's own byte
+# width and clamped to that width's all-nines maximum, exactly like enemy_hp_set. So a value
+# of 999 becomes "99" in a 2-wide field, "999" in a 3-wide field, etc. - never larger.
+# --------------------------------------------------------------------------- #
+
+# A weapon's $Damage is the one immediately followed (within a short window) by a
+# "$Damage Type:" line. That marker is what tells a weapon record apart from a creature's
+# bare $Damage inside #Character Info.
+_WEAPON_DAMAGE_RE = re.compile(
+    rb"(\$Damage\s*:\s*)(\d+)(?=[^\n]*\n[^\n]*\$Damage Type)")
+# Armour records begin with a "$Armor:" header line; everything up to the next "$Armor:" or
+# a new "#" block header belongs to one armour item. $Protection inside such a span is armour.
+_ARMOR_HEADER_RE = re.compile(rb"\$Armor\s*:")
+_PROTECTION_RE = re.compile(rb"(\$Protection\s*:\s*)(\d+)")
+_ARMOR_FIELD_RE = re.compile(rb"(\$Armor\s*:\s*)(\d+)")   # a numeric $Armor: value, if any
+
+
+def _armor_spans(blob: bytes):
+    """(start, end) byte spans that belong to armour item records.
+
+    An armour record starts at a "$Armor:" header and runs until the next "$Armor:" header
+    or the next "#..." block header, whichever comes first. Scoping $Protection to these
+    spans keeps us off creature $Protection fields in #Character Info.
+    """
+    starts = [m.start() for m in _ARMOR_HEADER_RE.finditer(blob)]
+    if not starts:
+        return []
+    # next block header after each start bounds the record
+    spans = []
+    for i, s in enumerate(starts):
+        nxt = starts[i + 1] if i + 1 < len(starts) else len(blob)
+        # also stop at the next "#" block header if it comes sooner
+        hdr = blob.find(b"\n#", s, nxt)
+        end = hdr if hdr != -1 else nxt
+        spans.append((s, end))
+    return spans
+
+
+def t_weapon_attack_max(blob, rng, value=999):
+    """Set every WEAPON's $Damage to a single high value (default 999, clamped per field).
+
+    Scope: only $Damage fields that are part of a weapon record (identified by an adjacent
+    "$Damage Type:" line), so creature damage is never touched. Size-preserving: the value
+    is right-justified into each field's own width and clamped to that width's maximum.
+    rng is unused - deterministic.
+    """
+    rep = Report("weapon_attack_max")
+    try:
+        v = max(1, int(value))
+    except (TypeError, ValueError):
+        rep.notes.append(f"unusable value {value!r} - refused, nothing changed")
+        return blob, rep
+    out = bytearray(blob)
+    hits = 0
+    # iterate over a snapshot so match offsets stay valid (widths never change)
+    for m in list(_WEAPON_DAMAGE_RE.finditer(bytes(out))):
+        width = len(m.group(2))
+        new = _fit_int_to_width(v, width)
+        if new != m.group(2):
+            a = m.start(2)
+            out[a:a + width] = new
+            hits += 1
+    if hits == 0:
+        rep.notes.append("no weapon $Damage fields found (or already maxed) - nothing changed")
+        return bytes(out), rep
+    rep.changed += hits
+    rep.notes.insert(0, f"{hits} weapon $Damage fields set to {v}")
+    rep.notes.append("weapons only (scoped by the adjacent $Damage Type marker); creatures untouched")
+    rep.notes.append("size-preserving; each value written inside its own field width (all-9s clamp)")
+    return bytes(out), rep
+
+
+def t_armor_protect_max(blob, rng, value=999):
+    """Buff armour: set every armour item's $Protection (and numeric $Armor:) high.
+
+    Scope: only $Protection fields inside armour record spans (led by a "$Armor:" header),
+    so creature $Protection inside #Character Info is never touched. Size-preserving and
+    clamped per field. rng is unused - deterministic.
+    """
+    rep = Report("armor_protect_max")
+    try:
+        v = max(1, int(value))
+    except (TypeError, ValueError):
+        rep.notes.append(f"unusable value {value!r} - refused, nothing changed")
+        return blob, rep
+    out = bytearray(blob)
+    spans = _armor_spans(bytes(out))
+    if not spans:
+        rep.notes.append("no $Armor: record headers found - nothing changed")
+        return bytes(out), rep
+    hits = 0
+    for s, e in spans:
+        seg = bytes(out[s:e])
+        for rx in (_PROTECTION_RE, _ARMOR_FIELD_RE):
+            for m in rx.finditer(seg):
+                width = len(m.group(2))
+                new = _fit_int_to_width(v, width)
+                if new != m.group(2):
+                    a = s + m.start(2)
+                    out[a:a + width] = new
+                    hits += 1
+    if hits == 0:
+        rep.notes.append("no armour $Protection fields found (or already maxed) - nothing changed")
+        return bytes(out), rep
+    rep.changed += hits
+    rep.notes.insert(0, f"{len(spans)} armour records, {hits} protection fields set to {v}")
+    rep.notes.append("armour only (scoped to $Armor: record spans); creatures untouched")
+    rep.notes.append("size-preserving; each value written inside its own field width (all-9s clamp)")
+    return bytes(out), rep
+
+
+# --------------------------------------------------------------------------- #
 # Doors - where a door LEADS, which is a name in the level's own `.tbl`
 #
 # A door is one entry of a level file's `#Triggers` block:
@@ -1685,12 +2128,58 @@ def _door_records(blob: bytes) -> list[dict]:
         idm = DOOR_ID_RE.search(blob, m.end(), end)
         if not idm or idm.group(1) != b"load level":
             continue
-        recs.append({"off": m.start(1), "name": m.group(1), "src": src})
+        # the arrival start-id: `+Index: N`. The destination MUST provide a player-start
+        # navpoint for this slot or the load fails and the game bounces to the menu (the
+        # "exit to the unknown" symptom). Captured so candidate selection can honour it.
+        idxm = re.search(rb"\+Index:\s*(\d+)", blob[m.end():end])
+        index = int(idxm.group(1)) if idxm else None
+        recs.append({"off": m.start(1), "name": m.group(1), "src": src, "index": index})
     return recs
 
 
-def _door_candidates(old_len: int, src_display: str | None) -> list[str]:
-    """Every legal target for one door. Empty means the door is left alone, not guessed at."""
+# player-start navpoints are named `$player<party>-<slot>`. A door's `+Index: K` arrives at
+# slot K, so a destination is only safe for that door if it declares a `$player*-K` navpoint.
+_PLAYER_START_RE = re.compile(rb"\$player\d+-(\d+)")
+_LEVEL_DECL_RE = re.compile(rb'\$Level:\s*"([^"]{1,40})"')
+
+
+def _level_start_slots(blob: bytes) -> dict[str, set[int]]:
+    """Map each level name (lower-case) -> the set of start-id slots it actually provides.
+
+    Built by segmenting the stream on every level marker (`Level file for X` comment and
+    `$Level: "X"` declaration) and collecting the `$player*-<slot>` navpoint slots that fall
+    in each level's span. Conservative: a level only "provides" a slot we can actually see,
+    so an unproven target is simply not offered (refuse rather than guess). Used to stop a
+    door being remapped to a level that cannot spawn the player at the door's `+Index`.
+    """
+    import bisect
+    marks = [(m.start(), m.group(1).strip().decode("latin-1", "replace"))
+             for m in DOOR_LEVEL_RE.finditer(blob)]
+    marks += [(m.start(), m.group(1).decode("latin-1", "replace"))
+              for m in _LEVEL_DECL_RE.finditer(blob)]
+    marks.sort()
+    starts = [p for p, _ in marks]
+    names = [n for _, n in marks]
+    slots: dict[str, set[int]] = {}
+    for pm in _PLAYER_START_RE.finditer(blob):
+        i = bisect.bisect_right(starts, pm.start()) - 1
+        if i < 0:
+            continue
+        key = _door_key(names[i])
+        slots.setdefault(key, set()).add(int(pm.group(1)))
+    return slots
+
+
+def _door_candidates(old_len: int, src_display: str | None,
+                     index: int | None = None,
+                     slots_by_level: dict[str, set[int]] | None = None) -> list[str]:
+    """Every legal target for one door. Empty means the door is left alone, not guessed at.
+
+    When `index` and `slots_by_level` are supplied, a target is also required to PROVIDE that
+    start-id slot - so a remapped door always lands somewhere the player can actually spawn,
+    instead of bouncing to the menu. A target whose slot set we could not determine is
+    excluded (refuse rather than guess).
+    """
     out = []
     for name in DOOR_TARGET_NAMES:
         if len(name) > old_len:                     # the field is fixed width
@@ -1701,6 +2190,10 @@ def _door_candidates(old_len: int, src_display: str | None) -> list[str]:
             continue
         if _door_same_level(src_display, name):     # never back to its own level
             continue
+        if index is not None and slots_by_level is not None:
+            provided = slots_by_level.get(_door_key(name))
+            if not provided or index not in provided:
+                continue                            # can't spawn the player here at this slot
         out.append(name)
     return out
 
@@ -1778,6 +2271,12 @@ def t_door_destination_remap(blob, rng, how="shuffle"):
         rep.notes.append("policy 'off' - nothing changed")
         return blob, rep
 
+    # Map each level to the player-start slots it provides, so a door is only sent somewhere
+    # the player can actually spawn at that door's +Index. Without this, a door whose +Index
+    # the destination lacks fails to load and bounces to the menu ("exit to the unknown").
+    slots_by_level = _level_start_slots(blob)
+    rep.notes.append(f"start-id map: {len(slots_by_level)} levels with known player-start slots")
+
     # deterministic per seed: the door order and the destination pool are both seeded, and the
     # chain's Random is used in list order like every other transform
     order = list(range(len(recs)))
@@ -1796,10 +2295,12 @@ def t_door_destination_remap(blob, rng, how="shuffle"):
     for idx in order:
         rec = recs[idx]
         old = rec["name"]
+        door_index = rec.get("index")
         if how == "shuffle":
-            cands = _door_candidates(len(old), rec["src"])
+            cands = _door_candidates(len(old), rec["src"], door_index, slots_by_level)
             if not cands:
-                _skip(f"no legal target of length <= {len(old)}")
+                _skip(f"no legal target of length <= {len(old)} that provides start-id "
+                      f"{door_index}")
                 continue
             new = cands[rng.randrange(len(cands))].encode("latin-1")
         else:
@@ -1807,23 +2308,34 @@ def t_door_destination_remap(blob, rng, how="shuffle"):
             for j, cand in enumerate(pool):
                 if cand is None or len(cand) > len(old):
                     continue
-                if cand.decode("latin-1").lower() in DOOR_TARGET_EXCLUDE:
+                cand_name = cand.decode("latin-1")
+                if cand_name.lower() in DOOR_TARGET_EXCLUDE:
                     continue
                 if cand.startswith(DOOR_SENTINEL.encode()):
                     continue
-                if _door_same_level(rec["src"], cand.decode("latin-1")):
+                if _door_same_level(rec["src"], cand_name):
                     continue
+                # honour the arrival slot: the swapped-in destination must be able to spawn
+                # the player at this door's +Index, or it would bounce to the menu
+                if door_index is not None:
+                    provided = slots_by_level.get(_door_key(cand_name))
+                    if not provided or door_index not in provided:
+                        continue
                 pick = j
                 break
             if pick is None:
-                _skip("no remaining destination fits this field")
+                _skip("no remaining destination fits this field and start-id")
                 continue
             new = pool[pick]                      # type: ignore[assignment]
             pool[pick] = None
 
-        # the field is the name plus its closing quote; write new + quote + padding, so the
-        # replacement is exactly len(old)+1 bytes whatever the new name's length
-        repl = new + b'"' + b" " * (len(old) - len(new))
+        # the field is the name plus its closing quote. The padding must go INSIDE the quotes:
+        # new name, then spaces to fill the old name's width, then the single closing quote.
+        # (The previous version put the quote right after the name and padded AFTER it, which
+        # left the real closing quote dangling -> a malformed "name" " destination the game
+        # could not resolve, so transitions silently failed. This keeps exactly one closing
+        # quote adjacent and pads within the field: len(new)+pad+1 == len(old)+1 bytes.)
+        repl = new + b" " * (len(old) - len(new)) + b'"'
         expect = old + b'"'
         off = rec["off"]
         if blob[off:off + len(expect)] != expect:    # declares-and-refuses, and bounds-checks
@@ -1888,8 +2400,10 @@ def mode_options(mode: str, options: dict | None = None) -> dict:
 
 # transforms that accept keyword options from the request
 OPTION_AWARE = {"ring_hunt", "xp_scale", "levelcap_set", "permadeath", "enemy_difficulty",
+                "player_stats_random", "enemy_stats_random", "enemy_hp_set",
                 "enemies_none", "enemies_swarm", "enemies_random", "enemies_amount",
-                "door_destination_remap", "chest_items"}
+                "door_destination_remap", "chest_items",
+                "weapon_attack_max", "armor_protect_max"}
 
 OPTIONS = {
     "chest_items": {
@@ -1961,6 +2475,58 @@ OPTIONS = {
             "label": "Creature level shift (flat)",
             "help": "Adds this many levels to every placed monster instead of scaling. "
                     "0 = use the dial above.",
+        },
+    },
+    "enemy_stats_random": {
+        "style": {
+            "type": "choice", "default": "floor", "choices": list(STAT_STYLES),
+            "label": "Shuffle style",
+            "help": "floor = keep every value in its own width class, so a boss stays a boss · "
+                    "pure = let values cross widths where they fit, so a boss can end up weak. "
+                    "Hostiles are shuffled among themselves only.",
+        },
+        "hp": {
+            "type": "str", "default": "shuffle",
+            "label": "Enemy HP",
+            "help": "shuffle = HP moves in the stat shuffle (default) · one = every enemy set "
+                    "to 1 HP for a one-hit-kill run · a number (e.g. 50) = every enemy set to "
+                    "that HP. A uniform value is padded into each field's own width, never "
+                    "clamped past what the field can hold, so the disc never changes size.",
+        },
+    },
+    "player_stats_random": {
+        "style": {
+            "type": "choice", "default": "floor", "choices": list(STAT_STYLES),
+            "label": "Shuffle style",
+            "help": "floor = keep every value in its own width class · pure = let values cross "
+                    "widths where they fit. The party is shuffled among themselves only.",
+        },
+    },
+    "enemy_hp_set": {
+        "value": {
+            "type": "int", "default": 1, "min": 1, "max": 999,
+            "label": "Enemy HP",
+            "help": "Every hostile creature is set to this many hit points. Clamped "
+                    "per field to the largest value that fits its width, so the disc "
+                    "never changes size.",
+        },
+    },
+    "weapon_attack_max": {
+        "value": {
+            "type": "int", "default": 999, "min": 1, "max": 999,
+            "label": "Weapon damage",
+            "help": "Every weapon's $Damage is set to this value, clamped per field to the "
+                    "largest number that fits its width, so the disc never changes size. "
+                    "999 = as high as each field allows.",
+        },
+    },
+    "armor_protect_max": {
+        "value": {
+            "type": "int", "default": 999, "min": 1, "max": 999,
+            "label": "Armour protection",
+            "help": "Every armour item's $Protection is set to this value, clamped per field "
+                    "to the largest number that fits its width, so the disc never changes size. "
+                    "999 = as tanky as each field allows.",
         },
     },
     "enemies_none": {
@@ -2167,6 +2733,51 @@ TRANSFORM_INFO = {
         "Equipment slots",
         "Shuffles +Slot / $Slot, so gear lands in the wrong equipment slot.",
     ),
+    "enemy_stats_random": (
+        "Random enemy HP & stats",
+        "Shuffles the hostile creatures' own numbers — hit points, ability points, "
+        "aggression, attack radius, view/detection range, movement rates — among each "
+        "other. enemy_difficulty scales these; this moves them between creatures instead. "
+        "style=floor keeps a boss a boss; style=pure lets a boss end up weak. Hostiles only.",
+    ),
+    "player_stats_random": (
+        "Random player stats",
+        "Shuffles the playable party's numbers among themselves — HP, ability points, "
+        "aggression, ranges and turn rates (this game has no Str/Dex/Int). style=floor "
+        "keeps each value in its own width tier; style=pure lets them cross where they fit. "
+        "Friendly side only.",
+    ),
+    "enemy_hp_set": (
+        "Set enemy HP",
+        "Sets every hostile creature's $Max Hit Points and $Hit Points to one value "
+        "you choose, padded into each field's own width (all-9s clamp if it will not "
+        "fit). HP only - attack, damage and level are left alone. Independent of the "
+        "enemy_stats_random 'hp' option. Size-preserving. In-game effect unverified.",
+    ),
+    "weapon_attack_max": (
+        "Max weapon damage",
+        "Sets every weapon's $Damage to one high value (default 999, clamped into each "
+        "field's own width). Scoped to weapon records by the adjacent $Damage Type marker, "
+        "so creature damage is never touched. Size-preserving. In-game effect unverified.",
+    ),
+    "armor_protect_max": (
+        "Buff armour protection",
+        "Sets every armour item's $Protection to one high value (default 999, clamped into "
+        "each field's own width). Scoped to $Armor: record spans, so creature protection is "
+        "never touched. Size-preserving. In-game effect unverified.",
+    ),
+    "enemy_drops_random": (
+        "Random enemy drops",
+        "Shuffles which item each enemy `+Drop:` yields, among equal-length item names. The "
+        "drop-chance weight is left alone, so rates are unchanged - only WHAT drops moves. "
+        "Nothing is invented or lost. Size-preserving.",
+    ),
+    "music_tracks_shuffle": (
+        "Random music (tracks only)",
+        "Shuffles the background music tracks ($Soundtrack) among equal-length names, so the "
+        "wrong track plays in the wrong place - but sound effects are left alone. Use "
+        "music_shuffle instead if you want SFX scrambled too. Size-preserving.",
+    ),
     "creature_stats_shuffle": (
         "Creature stats",
         "Shuffles the creature stat block — speed, weight, hit points, damage, "
@@ -2240,6 +2851,11 @@ TRANSFORMS = {
     "enemies_random": t_enemies_random,
     "enemies_swarm": t_enemies_swarm,
     "enemy_difficulty": t_enemy_difficulty,
+    "enemy_stats_random": t_enemy_stats_random,
+    "player_stats_random": t_player_stats_random,
+    "enemy_hp_set": t_enemy_hp_set,
+    "weapon_attack_max": t_weapon_attack_max,
+    "armor_protect_max": t_armor_protect_max,
     "shops_free": t_shops_free,
     "shops_crazy": t_shops_crazy,
     "shops_none": t_shops_none,
@@ -2445,6 +3061,43 @@ MODES = {
         "transforms": ["creature_stats_shuffle", "spawn_shuffle"],
         "risk": "medium — changes combat balance, untested in game",
     },
+    "enemy_stats": {
+        "label": "Random Enemy Stats",
+        "blurb": "Randomized enemy HP and stats: the hostile creatures' own numbers are "
+                 "shuffled among each other, so the mix changes without the average moving. "
+                 "Bosses stay top-tier (style=floor); enemy_difficulty scales, this shuffles.",
+        "transforms": ["enemy_stats_random"],
+        "options": {"enemy_stats_random": {"style": "floor"}},
+        "risk": "medium — combat balance moves; untested in game",
+    },
+    "glass_enemies": {
+        "label": "One-HP Enemies",
+        "blurb": "Every enemy is set to 1 hit point — everything hostile dies in a single hit. "
+                 "HP fields vary in width, so the 1 is padded into each field rather than "
+                 "changing its length; nothing else about a creature is touched.",
+        "transforms": ["enemy_stats_random"],
+        "options": {"enemy_stats_random": {"hp": "one"}},
+        "risk": "medium — trivialises combat by design; untested in game",
+    },
+    "player_stats": {
+        "label": "Random Player Stats",
+        "blurb": "Randomized player stats: the playable party's HP, ability points, aggression, "
+                 "ranges and turn rates are shuffled among the party. Width tiers preserved so "
+                 "nobody is left unplayable (style=floor).",
+        "transforms": ["player_stats_random"],
+        "options": {"player_stats_random": {"style": "floor"}},
+        "risk": "medium — party balance moves; untested in game",
+    },
+    "stat_chaos": {
+        "label": "Stat Chaos",
+        "blurb": "Both stat shufflers at once: enemy numbers reshuffled among enemies, party "
+                 "numbers among the party. Each side stays internally coherent; the balance "
+                 "between and within sides is scrambled.",
+        "transforms": ["enemy_stats_random", "player_stats_random"],
+        "options": {"enemy_stats_random": {"style": "floor"},
+                    "player_stats_random": {"style": "floor"}},
+        "risk": "medium — combat and party balance both move; untested in game",
+    },
     "behaviour_chaos": {
         "label": "Behaviour Chaos",
         "blurb": "NPC actions and animations shuffled. Characters do the wrong things, in "
@@ -2532,6 +3185,16 @@ MODES = {
         "transforms": [],
         "binary": [["endgame_gate", {"stage": 5}]],
         "risk": "medium — changes progression, needs a boot test",
+    },
+    "skip_intro": {
+        "label": "Skip Intro Movie (binary)",
+        "blurb": "Stops the boot/intro video from playing. The intro is not in the script "
+                 "layer (zero .pss refs), so this patches the executable. BLOCKED until the "
+                 "movie-start call site is located in the Ghidra R5900 project — the engine "
+                 "lists it and refuses cleanly rather than guessing an address.",
+        "transforms": [],
+        "binary": [["skip_intro", {}]],
+        "risk": "blocked — call site into mplayer.o not yet resolved; see docs/COMPILED-CODE.md",
     },
 }
 
