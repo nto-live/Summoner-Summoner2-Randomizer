@@ -632,12 +632,17 @@ internal static class UiProof
 
     private static void WriteStrings(Utf8JsonWriter w, string name, IEnumerable<string> items)
     {
-        // item count + first few items only; the full list can be thousands long
+        // Faithful up to 500 entries, then a sample. The cap exists so a genuinely huge
+        // list cannot bloat the dump - but it used to be 8, which silently truncated the
+        // MODE COMBO, and so made the dump useless for the one question suite D exists to
+        // ask: is every mode actually offered? A dump that cannot be trusted to list what
+        // the UI offers is worse than no dump, because it looks like verification.
+        const int Cap = 500;
         var list = items.ToList();
         w.WriteStartObject(name);
         w.WriteNumber("count", list.Count);
         w.WriteStartArray("sample");
-        foreach (var s in list.Take(8)) w.WriteStringValue(Trunc(s, 160));
+        foreach (var s in list.Take(Cap)) w.WriteStringValue(Trunc(s, 160));
         w.WriteEndArray();
         w.WriteEndObject();
     }

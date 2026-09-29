@@ -498,11 +498,17 @@ public sealed class MainForm : Form
     }
 
     /// <summary>
-    /// Builds one CheckBox per <c>--list</c> binary-patch entry in the independent
-    /// "Binary patches (executable)" section. These toggles are decoupled from the
-    /// mode combo and the transform grid: ApplyMode never touches them. Blocked
-    /// patches (e.g. skip_intro) are hinted as pending but stay toggleable so the
-    /// user can still request them - the engine refuses them honestly at build time.
+    /// Builds one CheckBox per selectable <c>--list</c> binary-patch entry in the
+    /// independent "Binary patches (executable)" section. These toggles are decoupled
+    /// from the mode combo and the transform grid: ApplyMode never touches them.
+    ///
+    /// A patch carrying <c>blocked</c> gets NO control. This previously conflated two
+    /// different things - "not finished yet, so let the user ask and have the engine
+    /// refuse honestly" and "documented dead end, i.e. the wrong lever". Offering the
+    /// second is a hazard: <c>hide_tutorials</c> builds a disc where the opening is
+    /// frozen with no on-screen instructions. Suite D of docs/TEST-PLAN.md requires that
+    /// no control exists for a blocked patch, so blocked patches are skipped here and
+    /// left to the pending pane to explain.
     /// </summary>
     private void PopulateBinaryPatches()
     {
@@ -514,27 +520,25 @@ public sealed class MainForm : Form
         {
             var key = kv.Key;
             var info = kv.Value;
-            bool blocked = !string.IsNullOrEmpty(info.Blocked);
+
+            // Blocked = not offered. The engine would refuse it anyway, and a knob the
+            // user can turn that can only produce a broken disc is worse than no knob.
+            if (!string.IsNullOrEmpty(info.Blocked))
+                continue;
 
             var cb = new CheckBox
             {
-                Text = blocked ? info.Label + " \u2014 pending" : info.Label,
+                Text = info.Label,
                 Tag = key,
                 AutoSize = true,
                 Checked = false,
-                ForeColor = blocked ? SystemColors.GrayText : SystemColors.ControlText,
+                ForeColor = SystemColors.ControlText,
                 Margin = new Padding(3, 3, 3, 1),
             };
 
-            var tip = info.Help ?? "";
-            if (blocked)
-                tip = (tip.Length > 0 ? tip + Environment.NewLine + Environment.NewLine : "") +
-                      "Pending: " + info.Blocked;
-            if (tip.Length > 0)
-                _binaryTips.SetToolTip(cb, tip);
+            if (!string.IsNullOrEmpty(info.Help))
+                _binaryTips.SetToolTip(cb, info.Help);
 
-            // Blocked patches remain selectable so the user can request them; the
-            // engine reports them as applied:false with a reason.
             cb.CheckedChanged += (_, _) =>
             {
                 if (cb.Tag is not string k) return;

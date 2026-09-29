@@ -91,17 +91,18 @@ Acceptance, per row:
 This suite is the difference between "the engine works" and **"a user describing what they want in
 the UI gets a working disc."**
 
-### D. GUI parity — automated, minutes
+### D. GUI parity — automated, minutes · **implemented: `tools/test-gui-parity.py`**
 
 The GUI must not be able to ask for something the engine cannot do, and must not hide something it
-can do.
+can do. It runs the real app headless (`SummonerRando.Harness --dump-ui`), inspects the rendered
+control tree, then re-runs the argv the GUI builds (`EngineClient.BuildArgs`) through the CLI.
 
 ```
-SummonerRando.Harness.exe --dump-ui ui.json --state populated --mode <every mode>
-SummonerRando.Harness.exe --screenshot shot.png
+python tools/test-gui-parity.py              # run the checks
+python tools/test-gui-parity.py --dump-only  # just refresh the dumped control tree
 ```
 
-Acceptance:
+Acceptance — all six currently pass:
 - **every** mode in `mode_order[]` has a selectable control in the dumped UI tree (currently proved
   for the catalogue; the matrix must cover the whole list, not a sample)
 - every transform and every option has a control **or** is reachable through the mode that owns it
@@ -109,8 +110,8 @@ Acceptance:
   poisoned lever
 - the argv the GUI constructs for a mode (`EngineClient.BuildArgs`) is byte-identical to an argv
   the CLI accepts and succeeds on
-- the **UI's own labels agree with the catalogue**: today `skip_intro`'s *mode* metadata says
-  "BLOCKED" while the *binary patch* is armed and working — see §4 defect D2
+- the **UI's own labels agree with the catalogue** (this caught D7 and D8 - a blocked patch given
+a control, and a dump that silently listed 8 of 43 modes)
 
 ### E. Boot smoke — automated but slow
 
@@ -159,7 +160,8 @@ must appear there with a tier, and the tier may only be raised by a suite above.
 
 ## 4. Defects found while writing this plan
 
-Recorded so they are not lost. All five are real today.
+Recorded so they are not lost. All were real on 2026-09-29; the ones marked fixed are now
+covered by a check that fails if they come back.
 
 - **D1 — the test suite is red.** `3 failed, 5 passed, 2 skipped`. All three failures are staleness,
   not breakage: `skip_intro` was un-blocked on 2026-09-29 and the tests
@@ -179,7 +181,21 @@ Recorded so they are not lost. All five are real today.
   this. Either bundle them into a named mode or say so in the register.
 - **D5 — the harness never validates a real artefact.** `EngineClient` plumbing is proved against
   `--dry-run` only, so nothing exercises "write the ISO and check it". That is precisely the
-  user's question, and it is suite C.
+  user's question, and it is suite C. *Addressed:* `tools/test-build-matrix.py` builds a real disc
+  per mode; suite D additionally re-runs the GUI's argv through the CLI.
+- **D6 — `vanilla` was offered as a build target but refused to build** (`rc=1`, "nothing selected
+  to randomize"). *Fixed:* `buildable: false` in the catalogue, an actionable refusal that names
+  the alternative, and the app now labels it "(reference only)", defaults to the first buildable
+  mode, and disables Build with a reason.
+- **D7 — the GUI offered a BLOCKED patch as a tickable control.** `hide_tutorials` (the documented
+  wrong lever - it builds a disc where the opening is frozen with no instructions) appeared as a
+  checkbox, because `PopulateBinaryPatches` conflated "not finished yet" with "dead end" and kept
+  every blocked patch toggleable. A control that can only produce a broken disc is worse than no
+  control. *Fixed:* blocked patches get no control; suite D check 4 now fails if one reappears.
+- **D8 — the harness UI dump truncated every string list to 8 items.** The mode combo has 43
+  entries; the dump recorded 8, so a check for "is every mode offered?" would have looked like
+  verification while proving almost nothing. *Fixed:* capped at 500 in `UiProof.WriteStrings`;
+  suite D check 1-2 now covers all 43 by label.
 
 ---
 
