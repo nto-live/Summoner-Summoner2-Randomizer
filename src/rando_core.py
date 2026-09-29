@@ -3671,13 +3671,15 @@ MODES = {
     },
     "skip_intro": {
         "label": "Skip Intro Movie (binary)",
-        "blurb": "Stops the boot/intro video from playing. The intro is not in the script "
-                 "layer (zero .pss refs), so this patches the executable. BLOCKED until the "
-                 "movie-start call site is located in the Ghidra R5900 project — the engine "
-                 "lists it and refuses cleanly rather than guessing an address.",
+        "blurb": "Stops the boot/intro video from playing: it makes the movie-player routine "
+                 "return immediately, which neutralises every boot-movie call at once. The intro "
+                 "is not in the script layer (zero .pss refs), so this is an executable patch. "
+                 "Play-verified - the THQ logo is gone. NOTE: this removes the .pss FMV logos; the "
+                 "in-engine story cinematic is a separate $Cutscene and is NOT removed by this "
+                 "patch (neutering it hangs the boot).",
         "transforms": [],
         "binary": [["skip_intro", {}]],
-        "risk": "blocked — call site into mplayer.o not yet resolved; see docs/COMPILED-CODE.md",
+        "risk": "low - presentation only; play-verified (boot logos gone)",
     },
 }
 

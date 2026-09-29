@@ -1,0 +1,10 @@
+# Runtime + test dependencies for the Summoner Randomizer engine.
+# The engine itself is pure stdlib; these are for the test suite.
+#
+#   python -m pip install -r requirements.txt
+#   python -m pytest tests -q
+#
+# Pinned as lower bounds, not exact pins: the suite only needs the property-testing
+# API, which is stable. If a future hypothesis release changes behaviour, pin it here.
+pytest>=8.0
+hypothesis>=6.0

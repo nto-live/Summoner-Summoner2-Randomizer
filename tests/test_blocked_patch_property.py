@@ -6,8 +6,8 @@ Property 5: A blocked binary patch never aborts the build
 
 Validates: Requirements 6.1, 6.2, 6.3, 8.4
 
-The design's Property 5 says: combining the blocked ``skip_intro`` patch with any
-subset of transform options must still let the build complete, with ``skip_intro``
+The design's Property 5 says: combining the blocked ``hide_tutorials`` patch with any
+subset of transform options must still let the build complete, with ``hide_tutorials``
 reporting ``applied: false`` with a reason and writing zero bytes.
 
 The pure, fast core of that guarantee lives in the binary layer: ``apply_patches``
@@ -19,12 +19,18 @@ this test targets the refusal invariant directly.
 
 Approach (a) from the task: build a minimal synthetic PS2 EE ELF-in-ISO fixture that
 ``find_elf`` / ``_valid_elf`` accept, write it to a temp file, then call
-``apply_patches`` with the blocked ``skip_intro`` patch (combined with arbitrary
+``apply_patches`` with the blocked ``hide_tutorials`` patch (combined with arbitrary
 unknown patch names and param dicts) and assert:
-  * the ``skip_intro`` result entry has ``applied == False`` with a note containing
+  * the ``hide_tutorials`` result entry has ``applied == False`` with a note containing
     "BLOCKED",
   * the ISO bytes are byte-for-byte unchanged (hash equal before/after), and
   * no exception is raised.
+
+NOTE (2026-09-29): the blocked patch used to be ``skip_intro``. That changed when the
+movie-start call site was located (va 0x002419C0), so ``skip_intro`` is now armed and
+play-verified and ``hide_tutorials`` is the documented wrong lever. This test tracks
+"whichever patch is blocked", so it must be updated whenever that role moves - see
+docs/TEST-PLAN.md defect D1.
 """
 from __future__ import annotations
 
@@ -64,8 +70,8 @@ def _build_synthetic_iso() -> bytes:
     e_entry = binary.VADDR_BASE
     seg_vaddr = binary.VADDR_BASE
     seg_offset = binary.ELF_FILE_OFF_BASE
-    # Cover the skip_intro va so the segment is plausible, though the blocked patch
-    # is refused before any address translation happens.
+    # Cover the blocked patch's va so the segment is plausible, though the blocked
+    # patch is refused before any address translation happens.
     seg_filesz = 0x00200000
 
     hdr = bytearray(52)
@@ -114,16 +120,34 @@ def test_synthetic_fixture_is_a_valid_elf(tmp_path):
     iso = _write_iso(tmp_path)
     loc = binary.find_elf(iso)
     assert loc.seg_vaddr == binary.VADDR_BASE
-    # skip_intro must genuinely be blocked, otherwise the property is meaningless.
-    assert binary.PATCHES["skip_intro"].blocked
+    # At least one patch must genuinely be blocked, or the property is meaningless.
+    # This guard is what fires if the last blocked patch is un-blocked - which is
+    # exactly what happened on 2026-09-29 (docs/TEST-PLAN.md defect D1).
+    assert _BLOCKED_NAMES, "no blocked patch to exercise the refusal path with"
 
 
 # --------------------------------------------------------------------------- #
 # Property 5
 # --------------------------------------------------------------------------- #
-# Names that are either blocked or unknown - none of them may ever write a byte.
+# Which patches are blocked is DERIVED from the catalogue, never hardcoded.
+#
+# This test previously named ``skip_intro`` in both its prose and its data. On
+# 2026-09-29 that patch was un-blocked (its call site was located) and the role moved
+# to ``hide_tutorials`` - which broke the test twice over, because an armed patch in
+# the "others" pool is *allowed* to write. Deriving the set means the next time the
+# role moves, this file needs no edit at all. See docs/TEST-PLAN.md defect D1.
+_BLOCKED_NAMES = sorted(
+    n for n, p in binary.PATCHES.items() if p.blocked and p.va is not None
+)
+assert _BLOCKED_NAMES, (
+    "no blocked patch with a resolved address - this property has nothing to test"
+)
+
+# A blocked patch to target, and a pool that may contain only blocked or unknown
+# names: none of them may ever write a byte.
+_TARGET = st.sampled_from(_BLOCKED_NAMES)
 _OTHER_NAMES = st.sampled_from(
-    ["skip_intro", "totally_unknown", "not_a_patch", "", "endgame_gate?"]
+    _BLOCKED_NAMES + ["totally_unknown", "not_a_patch", "", "endgame_gate?"]
 )
 
 # Arbitrary small param dicts to make sure encode()/params never get a chance to run
@@ -138,24 +162,25 @@ _PARAMS = st.dictionaries(
 @settings(max_examples=100, deadline=None,
           suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(
+    target=_TARGET,
     others=st.lists(st.tuples(_OTHER_NAMES, _PARAMS), max_size=4),
-    skip_params=_PARAMS,
+    blocked_params=_PARAMS,
     position=st.integers(min_value=0, max_value=5),
 )
-def test_blocked_patch_never_aborts_the_build(tmp_path, others, skip_params, position):
+def test_blocked_patch_never_aborts_the_build(tmp_path, target, others, blocked_params, position):
     """Feature: nto-live-randomizer-options, Property 5: A blocked binary patch never aborts the build
 
-    Applying the blocked ``skip_intro`` patch (combined with any set/order of other
+    Applying ANY blocked patch from the catalogue (combined with any set/order of other
     blocked or unknown patch names and arbitrary params) reports ``applied: false``
     with a reason, writes zero bytes, and does not raise.
     """
     iso = _write_iso(tmp_path)
     before = _sha(iso)
 
-    # Insert the blocked skip_intro somewhere in a varied patch list.
+    # Insert the blocked patch somewhere in a varied patch list.
     patch_list = list(others)
     idx = min(position, len(patch_list))
-    patch_list.insert(idx, ("skip_intro", dict(skip_params)))
+    patch_list.insert(idx, (target, dict(blocked_params)))
 
     # Must not raise - the build "completes".
     report = binary.apply_patches(iso, patch_list)
@@ -163,10 +188,10 @@ def test_blocked_patch_never_aborts_the_build(tmp_path, others, skip_params, pos
     # Zero bytes written: the disc image is byte-for-byte identical.
     assert _sha(iso) == before, "a blocked/unknown patch must never write to the ISO"
 
-    # skip_intro is reported applied:false with a BLOCKED reason (Req 6.1-6.3, 8.4).
-    skip_entries = [r for r in report["patches"] if r["patch"] == "skip_intro"]
-    assert skip_entries, "skip_intro must appear in the patch report"
-    for entry in skip_entries:
+    # The blocked patch is reported applied:false with a BLOCKED reason (Req 6.1-6.3, 8.4).
+    blocked_entries = [r for r in report["patches"] if r["patch"] == target]
+    assert blocked_entries, f"{target} must appear in the patch report"
+    for entry in blocked_entries:
         assert entry["applied"] is False
         notes = " ".join(entry.get("notes", []))
         assert "BLOCKED" in notes

@@ -1,10 +1,12 @@
-"""Example test: the `cli.py --list` JSON exposes the new registration and blocked patch.
+"""Example test: the `cli.py --list` JSON exposes the new registration and the blocked patch.
 
 Feature: nto-live-randomizer-options
 
 Drives cli.cmd_list() and captures the JSON document it emits on stdout (the same
-seam the seed tests use), then asserts the enemy_hp_set registration and the
-skip_intro blocked binary patch are visible in the catalogue the UI consumes.
+seam the seed tests use), then asserts the enemy_hp_set registration is visible, and that the binary catalogue
+marks the RIGHT patch blocked. That last one moved on 2026-09-29: skip_intro was
+un-blocked (its call site was located) and hide_tutorials became the dead end, so the
+assertion deliberately covers both directions.
 
 Run from repo root:
     python -m pytest tests/test_registration_list.py -q
@@ -46,7 +48,7 @@ def _list_payload() -> dict:
 # surface the skip_intro binary patch as blocked with a human-readable reason.
 #
 # Validates: Requirements 1.1, 1.2, 6.2
-def test_list_exposes_enemy_hp_set_and_blocked_skip_intro() -> None:
+def test_list_exposes_enemy_hp_set_and_the_blocked_binary_patch() -> None:
     payload = _list_payload()
 
     # 1.1 — enemy_hp_set is a registered transform.
@@ -80,12 +82,22 @@ def test_list_exposes_enemy_hp_set_and_blocked_skip_intro() -> None:
         "enemy_hp_set missing from option_aware"
     )
 
-    # 6.2 — the binary catalogue lists skip_intro, and it is blocked with a reason.
+    # 6.2 — the binary catalogue must surface exactly the patches a user may pick,
+    # and mark the dead end. As of 2026-09-29: skip_intro is UN-blocked (call site
+    # resolved at va 0x002419C0, play-verified) and hide_tutorials IS blocked.
+    # Both directions are asserted so that re-blocking skip_intro, or quietly
+    # un-blocking the wrong lever, fails here instead of reaching a user.
     binary = payload["binary"]
+
     assert "skip_intro" in binary, "skip_intro missing from binary catalogue"
-    skip_intro = binary["skip_intro"]
-    assert "blocked" in skip_intro, "skip_intro is not marked blocked"
-    reason = skip_intro["blocked"]
+    assert "blocked" not in binary["skip_intro"], (
+        "skip_intro is marked blocked again, but its call site is resolved and it is "
+        "play-verified - see docs/TEST-PLAN.md defect D2"
+    )
+
+    assert "hide_tutorials" in binary, "hide_tutorials missing from binary catalogue"
+    reason = binary["hide_tutorials"].get("blocked", "")
     assert isinstance(reason, str) and reason.strip(), (
-        "skip_intro blocked reason is empty"
+        "hide_tutorials must carry a non-empty blocked reason - it is a documented "
+        "wrong lever (see src/binary.py)"
     )

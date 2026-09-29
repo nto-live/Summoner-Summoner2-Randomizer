@@ -315,7 +315,18 @@ def cmd_build(a) -> int:
         tf = [t for t in tf if t != "permadeath"]
 
     if not tf and not binary_spec:
-        _emit({"error": "nothing selected to randomize"})
+        # `vanilla` lands here on purpose: it is the no-change baseline, so there is
+        # nothing to write. Say so usefully instead of returning a bare error - a user
+        # who picked "Vanilla" in the UI needs to know this is expected and what the
+        # mode is actually for, not that their build is broken.
+        _emit({
+            "error": "nothing selected to randomize",
+            "mode": a.mode,
+            "hint": ("No disc was written. 'vanilla' is the no-change baseline, so there "
+                     "is nothing to change - compare against the retail ISO directly "
+                     "with --verify <built.iso> --against <retail.iso>. Pick a mode "
+                     "that changes something, or pass --transforms / --binary."),
+        })
         return 1
 
     out = Path(a.out) if a.out else (APP / "work" / "out" /
