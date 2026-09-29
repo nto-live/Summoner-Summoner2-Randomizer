@@ -70,10 +70,17 @@ Python in `src/` (`cli.py` front door, `rando_core.py` transforms, `binary.py` E
   with `$Protection`. Both distinct from creature `$Damage`/`$Protection` in `#Character Info`.
 - **Enemy XP on kill** = `$Experience Gained` inside hostile `#Character Info` blocks (109/80).
 - **Drops** = `+Drop: "Item" <chance 2..100>`, attached to attack/death records, not the stat block.
-- **Tutorial**: `masad_*_tutorial` are `+Flag` declarations; logic in ELF. Fire-once gate
-  `FUN_0023c8f0` → `flag_is_set` `0x001f10a8` (nonzero=skip) → `flag_set` `0x001f11e8` (a3=1).
-  `Ignore tutorial` debug cmd string `0x0127dec0`, table `0x0023da14`. NOT patched; do not touch
-  shared flag_is_set/flag_set.
+- **Tutorial (BLOCKED — proven in game, do NOT re-attempt without a new mechanism)**:
+  17-step STATE MACHINE (step fns `0x0023C868`..`0x0023D4A8`, table `0x0127DEE8` stride 0x24),
+  dispatcher `FUN_0023D618`, ignore-global `gp-0x3A70` (debug toggle handler `0x0023C808`). The
+  dispatcher drives BOTH the tutorial popups AND the advance of the opening scripted scene
+  (burning-village intro) through the SAME path. Three resolved patches were each built + booted;
+  ALL break the game — v1 ignore-global on (`0x0023D648`→`li v0,1`): firewall soft-lock; v2 NOP
+  activation (`0x0023D6B4`): intro stalls; v3 auto-advance (`0x0023D74C`→nop): intro stalls. A
+  CONTROL disc without the patch plays fine, so the patch is the cause. No separable display-only
+  chokepoint exists. `skip_tutorial` is `blocked=` in binary.py (refuses/writes nothing) and out of
+  the build. Full write-up: `docs/RESEARCH-SKIP-TUTORIAL.md`. Never patch shared `flag_is_set`
+  `0x001F10A8` / `flag_set` `0x001F11E8` (all game flags route through them).
 
 ## Where the open work is
 

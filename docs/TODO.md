@@ -92,7 +92,14 @@ started). This is the master list; the sections above are the active next steps.
 - [DONE/PLAY?] Random XP per kill — `enemy_xp_random`.
 - [DONE/PLAY?] Settable XP per kill / fast leveling — `enemy_xp_set`.
 - [DONE] Enemy difficulty dial / stat shuffle / placement — `enemy_difficulty`, `enemy_stats_random`,
-  `enemies_random`, `enemies_amount`, `enemies_none`, `enemies_swarm` (pre-existing).
+  `enemies_amount`, `enemies_none`, `enemies_swarm` (pre-existing).
+- [DONE/PLAY?] Randomize which enemies appear — `enemies_random`, now with `scope` option:
+  `per_level` (SAFE, default — swaps only within a level so models stay loaded) or `global`
+  (experimental — the old behaviour that caused MISSING WORLD GRAPHICS when a swapped-in creature's
+  model wasn't loaded for that level). Use per_level.
+- [DONE/PLAY?] Lower enemy attack — `enemy_damage_set` (sets hostile `$Damage`, default 0). NOTE:
+  Summoner enemies have NO defence stat in the tables (verified 0 `$Protection` fields on 80 hostile
+  blocks), so "lower enemy defence" is not possible; lowering their damage is the soften lever.
 - [WANT] Settable weapon/armour values (not just max) — expose a `value` like the max transforms but
   allow any number; trivial extension of the two gear transforms.
 - [WANT] Randomize (not just max) gear stats — shuffle `$Damage`/`$Protection` among items.

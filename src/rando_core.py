@@ -1462,37 +1462,103 @@ def t_enemies_none(blob, rng, how="navpoint"):
     return bytes(out), rep
 
 
-def t_enemies_random(blob, rng):
+def t_enemies_random(blob, rng, scope="per_level", broad_min=5):
     """Randomize WHICH creature stands on each monster placement, and at what level.
 
     Same number of enemies, different ones - the safe direction (contents, not counts). Names
     are swapped only between equal-length names, and `+Level:` only between equal-width
     values, so every edit stays inside its field.
+
+    Only `+Monster` placements are ever touched - NPC/shopkeeper/prop placements (the peaceful
+    ones) are never changed, so quests never break.
+
+    `scope`:
+      * ``per_level`` (default, SAFE) - a placement only receives a creature name that already
+        appears in the SAME level (segmented by `#Objects`). Every swapped-in creature's model
+        is therefore already loaded for that level, so nothing goes missing. Limited variety in
+        small levels (the starting area only has a couple of monster types).
+      * ``broad`` (SAFE, more variety) - each monster placement is re-pointed at a creature drawn
+        from the "broadly available" pool: creatures that appear as placed monsters in at least
+        `broad_min` distinct levels (default 5), so their models are loaded widely and very likely
+        present. Only picks an equal-length name (size-preserving). This lets a Green Bacite / Lich
+        / Fire Imp turn up in the starting area without the missing-graphics risk of `global`.
+      * ``global`` (EXPERIMENTAL) - swap among all equal-length names game-wide. Can pull in a
+        creature whose model the level does not load -> MISSING WORLD GRAPHICS. Not recommended.
     """
     rep = Report("enemies_random")
+    scope = str(scope)
+    if scope not in ("per_level", "broad", "global"):
+        rep.notes.append(f"unknown scope {scope!r} - pick per_level, broad or global; nothing changed")
+        return blob, rep
     monsters, _ = _analyse_enemies(blob)
     if not monsters:
         rep.notes.append("no +Monster placements found")
         return blob, rep
     out = bytearray(blob)
-    by_len: dict[int, list] = {}
-    for rec in monsters:
-        by_len.setdefault(len(rec["char"]), []).append(rec)
-    swapped = 0
-    for ln, recs in sorted(by_len.items()):
-        if len(recs) < 2:
-            continue
-        names = [r["char"] for r in recs]
-        shuf = names[:]
-        rng.shuffle(shuf)
-        for rec, name in zip(recs, shuf):
-            if name != rec["char"]:
+
+    import bisect
+    obj_marks = sorted(m.start() for m in re.finditer(rb"\n#Objects\b", blob))
+
+    def seg_of(off: int) -> int:
+        return bisect.bisect_right(obj_marks, off) - 1 if obj_marks else 0
+
+    if scope == "broad":
+        # Build the broadly-available pool: creatures placed as monsters in >= broad_min distinct
+        # level segments, grouped by name length. Then each monster placement independently draws
+        # a same-length creature from that pool. Deterministic per seed.
+        from collections import defaultdict
+        levels_of: dict[bytes, set] = defaultdict(set)
+        for rec in monsters:
+            levels_of[rec["char"]].add(seg_of(rec["start"]))
+        pool_by_len: dict[int, list] = defaultdict(list)
+        for name, segs in levels_of.items():
+            if len(segs) >= broad_min:
+                pool_by_len[len(name)].append(name)
+        for k in pool_by_len:
+            pool_by_len[k].sort()   # stable order before seeded choice
+        swapped = 0
+        no_pool = 0
+        for rec in monsters:
+            cands = pool_by_len.get(len(rec["char"]))
+            if not cands:
+                no_pool += 1
+                continue
+            new = cands[rng.randrange(len(cands))]
+            if new != rec["char"]:
                 a, b = rec["char_abs"]
-                out[a:b] = name
+                out[a:b] = new
                 swapped += 1
-    rep.changed += swapped
-    rep.notes.append(f"{len(monsters)} monster placements, {len(by_len)} name lengths")
-    rep.notes.append(f"{swapped} creatures swapped for an equal-length creature")
+        pool_total = sum(len(v) for v in pool_by_len.values())
+        rep.changed += swapped
+        rep.notes.append(f"{len(monsters)} monster placements, scope=broad "
+                         f"(pool: {pool_total} creatures in {len(pool_by_len)} length classes, "
+                         f">= {broad_min} levels each)")
+        rep.notes.append(f"{swapped} placements re-pointed at a broadly-available creature; "
+                         f"{no_pool} left alone (no same-length creature in the pool)")
+        rep.notes.append("only +Monster placements touched; NPCs untouched; models broadly loaded")
+    else:
+        # per_level (safe) or global (experimental): permute existing names within the group.
+        groups: dict[tuple, list] = {}
+        for rec in monsters:
+            key = (seg_of(rec["start"]) if scope == "per_level" else 0, len(rec["char"]))
+            groups.setdefault(key, []).append(rec)
+        swapped = 0
+        for key, recs in groups.items():
+            if len(recs) < 2:
+                continue
+            names = [r["char"] for r in recs]
+            shuf = names[:]
+            rng.shuffle(shuf)
+            for rec, name in zip(recs, shuf):
+                if name != rec["char"]:
+                    a, b = rec["char_abs"]
+                    out[a:b] = name
+                    swapped += 1
+        rep.changed += swapped
+        rep.notes.append(f"{len(monsters)} monster placements, scope={scope}, {len(groups)} groups")
+        rep.notes.append(f"{swapped} creatures swapped for an equal-length creature "
+                         + ("in the same level (models stay loaded)" if scope == "per_level"
+                            else "game-wide (may pull unloaded models)"))
 
     levels = []
     for rec in monsters:
@@ -1892,6 +1958,55 @@ def t_enemy_hp_set(blob, rng, value=1):
     rep.notes.append("HP only; attack/damage/level untouched")
     rep.notes.append("size-preserving; each HP written inside its own field width")
     return out, rep
+
+
+# NOTE: Summoner's hostile creatures have NO defence/protection stat in the data tables
+# (verified: 0 `$Protection` fields across all 80 hostile #Character Info blocks). The only
+# combat-softening lever that exists in the tables is their `$Damage` (how hard they hit) and
+# their HP (`enemy_hp_set`). So "make enemies easier" = lower their damage. This transform does
+# that; there is no defence value to lower.
+_HOSTILE_DAMAGE_RE = re.compile(rb"(\$Damage\s*:\s*)(\d+)")
+
+
+def t_enemy_damage_set(blob, rng, value=0):
+    """Set every hostile creature's `$Damage` (how hard it hits) to a chosen value - lower = softer.
+
+    Summoner enemies have no defence stat, so this is the real "make enemies weaker" lever
+    besides HP. `$Damage` lives in each hostile `#Character Info` block (distinct from weapon
+    `$Damage`, which is scoped by an adjacent `$Damage Type` and NOT touched here). Default 0 =
+    enemies deal minimal damage. Right-justified into each field's own width, clamped. rng unused.
+    """
+    rep = Report("enemy_damage_set")
+    try:
+        v = max(0, int(value))
+    except (TypeError, ValueError):
+        rep.notes.append(f"unusable value {value!r} - refused, nothing changed")
+        return blob, rep
+    blocks = _hostile_char_blocks(blob)
+    if not blocks:
+        rep.notes.append("no hostile #Character Info blocks found - nothing changed")
+        return blob, rep
+    out = bytearray(blob)
+    hits = 0
+    for s, e in blocks:
+        seg = bytes(out[s:e])
+        for m in _HOSTILE_DAMAGE_RE.finditer(seg):
+            width = len(m.group(2))
+            new = _fit_int_to_width(v, width)
+            if new != m.group(2):
+                a = s + m.start(2)
+                out[a:a + width] = new
+                hits += 1
+    if hits == 0:
+        rep.notes.append("no hostile $Damage fields found (or already at value) - nothing changed")
+        return bytes(out), rep
+    rep.changed += hits
+    rep.notes.insert(0, f"{len(blocks)} hostile creature definitions, $Damage set to {v} "
+                        f"({hits} fields)")
+    rep.notes.append("enemy attack damage only, hostiles only; weapons and the party are untouched")
+    rep.notes.append("NOTE: enemies have no defence stat in the tables; damage is the soften lever")
+    rep.notes.append("size-preserving; each value written inside its own field width")
+    return bytes(out), rep
 
 
 # --------------------------------------------------------------------------- #
@@ -2672,7 +2787,7 @@ OPTION_AWARE = {"ring_hunt", "xp_scale", "levelcap_set", "permadeath", "enemy_di
                 "enemies_none", "enemies_swarm", "enemies_random", "enemies_amount",
                 "door_destination_remap", "chest_items",
                 "weapon_attack_max", "armor_protect_max", "enemy_xp_random",
-                "enemy_xp_set"}
+                "enemy_xp_set", "enemy_damage_set"}
 
 OPTIONS = {
     "chest_items": {
@@ -2812,6 +2927,27 @@ OPTIONS = {
             "label": "XP per kill",
             "help": "Every enemy gives this much XP on death, clamped per field to the largest "
                     "number that fits (so a 4-wide field caps at 9999). Set high to level fast.",
+        },
+    },
+    "enemy_damage_set": {
+        "value": {
+            "type": "int", "default": 0, "min": 0, "max": 999,
+            "label": "Enemy attack damage",
+            "help": "Every hostile creature's $Damage is set to this. 0 = enemies barely hurt you "
+                    "(softest). Enemies have no defence stat, so this is the soften lever. Clamped "
+                    "per field to its width. Weapons untouched.",
+        },
+    },
+    "enemies_random": {
+        "scope": {
+            "type": "choice", "default": "broad",
+            "choices": ["per_level", "broad", "global"],
+            "label": "Swap scope",
+            "help": "broad (recommended) = re-point each monster at a creature that appears in "
+                    "many levels, so you get variety (a Lich/Green Bacite in the start area) with "
+                    "models still loaded. per_level = only creatures already in the same level "
+                    "(safest, less variety). global = game-wide (experimental; can cause missing "
+                    "world graphics).",
         },
     },
     "enemies_none": {
@@ -3082,6 +3218,12 @@ TRANSFORM_INFO = {
         "field to the largest number that fits its width. Set it high to level up fast. Separate "
         "from the global XP multipliers. Hostiles only. Size-preserving.",
     ),
+    "enemy_damage_set": (
+        "Set enemy attack damage (lower = softer)",
+        "Sets every hostile creature's $Damage to one value you choose (default 0 = they barely "
+        "hurt you). Summoner enemies have no defence stat, so lowering their damage is the way to "
+        "make them softer. Weapons and the party are untouched. Hostiles only. Size-preserving.",
+    ),
     "enemy_drops_always": (
         "Guaranteed enemy drops",
         "Maxes every enemy +Drop chance (to 100 where the field allows), so any enemy that can "
@@ -3164,6 +3306,7 @@ TRANSFORMS = {
     "enemy_stats_random": t_enemy_stats_random,
     "player_stats_random": t_player_stats_random,
     "enemy_hp_set": t_enemy_hp_set,
+    "enemy_damage_set": t_enemy_damage_set,
     "weapon_attack_max": t_weapon_attack_max,
     "armor_protect_max": t_armor_protect_max,
     "enemy_xp_random": t_enemy_xp_random,
