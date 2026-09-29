@@ -70,17 +70,17 @@ Python in `src/` (`cli.py` front door, `rando_core.py` transforms, `binary.py` E
   with `$Protection`. Both distinct from creature `$Damage`/`$Protection` in `#Character Info`.
 - **Enemy XP on kill** = `$Experience Gained` inside hostile `#Character Info` blocks (109/80).
 - **Drops** = `+Drop: "Item" <chance 2..100>`, attached to attack/death records, not the stat block.
-- **Tutorial (BLOCKED — proven in game, do NOT re-attempt without a new mechanism)**:
-  17-step STATE MACHINE (step fns `0x0023C868`..`0x0023D4A8`, table `0x0127DEE8` stride 0x24),
-  dispatcher `FUN_0023D618`, ignore-global `gp-0x3A70` (debug toggle handler `0x0023C808`). The
-  dispatcher drives BOTH the tutorial popups AND the advance of the opening scripted scene
-  (burning-village intro) through the SAME path. Three resolved patches were each built + booted;
-  ALL break the game — v1 ignore-global on (`0x0023D648`→`li v0,1`): firewall soft-lock; v2 NOP
-  activation (`0x0023D6B4`): intro stalls; v3 auto-advance (`0x0023D74C`→nop): intro stalls. A
-  CONTROL disc without the patch plays fine, so the patch is the cause. No separable display-only
-  chokepoint exists. `skip_tutorial` is `blocked=` in binary.py (refuses/writes nothing) and out of
-  the build. Full write-up: `docs/RESEARCH-SKIP-TUTORIAL.md`. Never patch shared `flag_is_set`
-  `0x001F10A8` / `flag_set` `0x001F11E8` (all game flags route through them).
+- **Tutorial (SOLVED — `skip_tutorial` v3, play-verified)**: 17-step state machine (steps
+  `0x0023C868`..`0x0023D4A8`, table `0x0127DEE8`), dispatcher `FUN_0023D618`. THE WORKING PATCH:
+  NOP the tail advance-gate `0x0023D74C` (`beq s0,zero,0x0023d760` → `0x00000000`) so the
+  dispatcher advances the active tutorial every frame with no dismiss-button input. Tutorials
+  auto-complete, popups don't wait, and each step's scripted scene-action still runs (e.g.
+  `FUN_001DBF50("invis-door02")` removes the burning-village fire barrier — it clears on its own
+  short timer). PLAY-VERIFIED: tutorials off, opening plays through, fire drops. Enabled in
+  binary.py + build; UI toggle + `--binary skip_tutorial`. Dead ends (do not retry): v1 ignore-
+  global `0x0023D648`→li v0,1 = firewall soft-lock (skips step loop); v2 NOP activation
+  `0x0023D6B4` = scene stalls. Never patch shared `flag_is_set` `0x001F10A8` / `flag_set`
+  `0x001F11E8`. Full write-up: `docs/RESEARCH-SKIP-TUTORIAL.md`.
 
 ## Where the open work is
 

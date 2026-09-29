@@ -226,37 +226,29 @@ PATCHES: dict[str, Patch] = {
              "the in-engine story cinematic is a separate $Cutscene and is NOT removed by this "
              "patch (neutering it hangs the boot).",
     ),
-    # Skip the tutorials - BLOCKED. Investigated exhaustively in Ghidra AND tested in game; the
-    # tutorial machinery is fused with the opening scripted sequence and cannot be separated.
-    # Three approaches, all resolved to real addresses, all proven to break the game:
-    #   v1  force the ignore-global on  (0x0023D648 `lw v0,-0x3a70(gp)` -> `li v0,1`): early-outs
-    #       before the 17-step loop, so the steps' flag_set calls never run -> first-level firewall
-    #       never drops. Soft-lock. PROVEN IN GAME.
-    #   v2  NOP the popup-activate branch (0x0023D6B4 `bne v0,zero,0x0023d65c` -> nop): popups gone,
-    #       but the scripted burning-village intro never advanced (activation also drives the
-    #       scene). Stall. PROVEN IN GAME.
-    #   v3  auto-advance the tail (0x0023D74C `beq s0,zero,0x0023d760` -> nop): same stall - the
-    #       burning-village intro does not advance. PROVEN IN GAME. A CONTROL disc identical except
-    #       WITHOUT this patch plays the intro fine, so the patch is the cause.
-    # CONCLUSION: the dispatcher FUN_0023D618 runs BOTH the tutorial popups and the opening quest
-    # scene advance through the same path; every lever that removes the popups also stalls the
-    # scene. There is no separable "display only" chokepoint. Do not re-attempt without a new
-    # mechanism. Full write-up: docs/RESEARCH-SKIP-TUTORIAL.md. The va/original below are the last
-    # (v3) resolved site, kept for the record; `blocked` makes the applier refuse and write nothing.
+    # Skip the tutorials - the v3 "auto-advance" patch. The tutorial is a 17-step state machine
+    # (dispatcher FUN_0023D618). Its tail only advances the active tutorial when a dismiss button
+    # is polled (0x0023D74C `beq s0,zero,0x0023d760`). NOP-ing that branch makes the dispatcher
+    # advance every frame with no input, so each tutorial auto-completes and its scripted
+    # scene-action still runs (e.g. removing "invis-door02", the burning-village barrier) - the
+    # scene clears on its own short timer instead of waiting for you to read a popup.
+    #
+    # History (for the record): v1 forcing the ignore-global (0x0023D648 -> li v0,1) early-outs
+    # before the step loop -> flag_sets never run -> firewall soft-lock. v2 NOP-ing the
+    # activate branch (0x0023D6B4) removed popups but stalled the scene. v3 (this) keeps the loop
+    # AND advances it: popups gone, scene still progresses. PROVEN IN GAME (the burning-village
+    # fire drops after a moment). See docs/RESEARCH-SKIP-TUTORIAL.md.
+    #   0x0023D74C: 0x12000004 (beq s0,zero,0x0023d760) -> 0x00000000 (nop)
+    # Verified byte-for-byte against the retail ISO.
     "skip_tutorial": Patch(
         name="skip_tutorial",
         va=0x0023D74C,
         original=0x12000004,           # beq s0,zero,0x0023d760  (dispatcher tail advance gate)
-        encode=lambda p: 0x00000000,
+        encode=lambda p: 0x00000000,   # nop -> auto-advance tutorials every frame, no input needed
         label="Skip the tutorials",
-        help="Would turn off the in-game tutorial popups. BLOCKED: proven in game that every "
-             "resolved patch also stalls the scripted opening (the burning-village intro never "
-             "advances) - the tutorial and the opening quest share the same dispatcher path and "
-             "cannot be separated. See docs/RESEARCH-SKIP-TUTORIAL.md.",
-        blocked="the tutorial dispatcher (FUN_0023D618) drives both the popups and the opening "
-                "scripted scene through one path; all three resolved patches (ignore-global, "
-                "NOP-activation, auto-advance) break the burning-village intro in game. No "
-                "separable display-only lever exists. See docs/RESEARCH-SKIP-TUTORIAL.md.",
+        help="Auto-completes the in-game tutorial popups so they do not wait for you to read and "
+             "dismiss them - the opening plays through on its own. The scripted scenes the "
+             "tutorials gate (the burning-village fire clearing, etc.) still fire. Executable patch.",
     ),
 }
 

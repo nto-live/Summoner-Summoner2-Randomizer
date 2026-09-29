@@ -55,28 +55,27 @@ is separable from the progression it drives.
 controls popup path while their `flag_set` still runs. Single-caller, no flag work, cannot soft-lock.
 NOT "all tutorials off". Present in `binary.py`.
 
-## FINAL VERDICT (2026-09-28, proven in game) — BLOCKED
+## FINAL VERDICT (2026-09-28, proven in game) — SOLVED (v3 auto-advance)
 
-Three resolved patches were each built and booted; all three break the game, and a **control disc
-identical except without the patch plays the opening fine** (so the patch is the cause, not the
-mode stack):
+Three patches were tried; v3 is the winner. The earlier "v3 stalls" reading was WRONG — I did not
+wait long enough. The burning-village fire clears on its own **short timer** once the tutorial
+auto-advances; it is not a soft-lock.
 
 | approach | site | in-game result |
 |---|---|---|
-| v1 force ignore-global on | `0x0023D648 lw v0,-0x3a70(gp)` → `li v0,1` | firewall never drops (soft-lock) |
-| v2 NOP popup-activation | `0x0023D6B4 bne v0,zero,..` → nop | popups gone, burning-village intro stalls |
-| v3 auto-advance tail | `0x0023D74C beq s0,zero,..` → nop | popups gone, burning-village intro stalls |
+| v1 force ignore-global on | `0x0023D648 lw v0,-0x3a70(gp)` → `li v0,1` | firewall never drops (soft-lock) — BAD |
+| v2 NOP popup-activation | `0x0023D6B4 bne v0,zero,..` → nop | popups gone but scene stalls — BAD |
+| **v3 auto-advance tail** | **`0x0023D74C beq s0,zero,..` → nop** | **popups gone, scene advances on its timer — WORKS** |
 
-**Root cause, confirmed:** the dispatcher `FUN_0023D618` drives BOTH the tutorial popups AND the
-advance of the opening scripted scene (burning village) through the *same* path. Removing the popup
-display (any lever) also removes the scene-advance. There is no separable "draw the box only"
-chokepoint. The burning-village opening is `masad_flag_*` quest/`Game-Pre-Intro` `$Cutscene` driven
-and is entangled with the tutorial step machine.
+**Why v3 works:** the dispatcher `FUN_0023D618` tail only advances the active tutorial when a
+dismiss button is polled (`0x0023D74C beq s0,zero,0x0023d760`). NOP-ing that branch advances every
+frame with no input, so each tutorial auto-completes and its scripted scene-action still runs (e.g.
+`FUN_001DBF50("invis-door02")` removes the burning-village barrier). The scene clears on its normal
+timer, just without you reading/dismissing a popup. v1/v2 failed because they skipped the step loop
+or the activation that the scene-advance rides on; v3 keeps both and only removes the input-wait.
 
-`skip_tutorial` is therefore **BLOCKED** in `binary.py` (applier refuses, writes nothing) and pulled
-from the build. Do not re-attempt without a genuinely new mechanism (e.g. a per-frame popup RENDER
-call distinct from the scene-advance, not yet found; or a data-layer approach to the tutorial text
-that was also not locatable — the text is not keyed by the flag names in TABLES.VPP).
+`skip_tutorial` is therefore **ENABLED** in `binary.py` and in the build. It is a UI toggle +
+`--binary skip_tutorial`. **Play-verified**: tutorials off, opening plays through, fire drops.
 
 ## Angles NOT yet exhausted (next)
 
