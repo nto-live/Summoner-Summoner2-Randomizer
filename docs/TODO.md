@@ -75,3 +75,69 @@ sets and forcing it. Related to #4 (same flag machinery). Lower priority — it'
 - `skip_intro`: play-verified (THQ logo gone).
 - Doors: interior remap works byte-wise; overworld held on purpose.
 - Nothing game-data is tracked; `python tools/check-no-game-data.py` is clean.
+
+
+---
+
+## Feature inventory — everything we want, with status
+
+Status key: **DONE** (built + at least build-verified) · **PLAY?** (built, needs in-game check) ·
+**WIP** (partially done / has a known gap) · **BLOCKED** (reason recorded) · **WANT** (desired, not
+started). This is the master list; the sections above are the active next steps.
+
+### Enemies & combat
+- [DONE/PLAY?] All enemies 1 HP — `enemy_hp_set` (value settable).
+- [DONE/PLAY?] Max weapon attack — `weapon_attack_max`.
+- [DONE/PLAY?] Buff armour — `armor_protect_max`.
+- [DONE/PLAY?] Random XP per kill — `enemy_xp_random`.
+- [DONE/PLAY?] Settable XP per kill / fast leveling — `enemy_xp_set`.
+- [DONE] Enemy difficulty dial / stat shuffle / placement — `enemy_difficulty`, `enemy_stats_random`,
+  `enemies_random`, `enemies_amount`, `enemies_none`, `enemies_swarm` (pre-existing).
+- [WANT] Settable weapon/armour values (not just max) — expose a `value` like the max transforms but
+  allow any number; trivial extension of the two gear transforms.
+- [WANT] Randomize (not just max) gear stats — shuffle `$Damage`/`$Protection` among items.
+- [WANT] Randomize enemy attack/damage as its own lever (distinct from difficulty scaling).
+
+### Loot & economy
+- [DONE/PLAY?] Random enemy drops (which item) — `enemy_drops_random`.
+- [DONE/PLAY?] Guaranteed drops (max existing chance) — `enemy_drops_always`.
+- [BLOCKED] Force a drop on enemies that have NONE — needs adding bytes (breaks size-preservation);
+  would require a repack or slack. Documented limit.
+- [DONE] Item scatter / chest contents / chest payouts / shop prices — `item_scatter`, `chest_items`,
+  `chest_shuffle`, `shop_shuffle`, `shops_free/crazy/none` (pre-existing).
+- [WANT] Settable drop-chance value (not just max) — mirror the gear `value` option.
+- [WANT] Guaranteed-random-drop: give every enemy a random item at 100% — blocked by the "no +Drop
+  to add" limit above; revisit if a repack path opens.
+
+### Transitions / doors / world
+- [WIP] Randomize interior door destinations — `door_destination_remap`, 151/218, quote + `+Index` +
+  `+Script` handled.
+- [WIP] Complete the `+Index` start-slot map to recover ~44 skipped doors (TODO §2).
+- [BLOCKED] Overworld / masad transitions random — held; hub load path not understood (TODO §3).
+- [WANT] Reachability guard — ensure a seed can't strand the player (needs a flag/graph solver;
+  long-standing design item in `PLANNED.md`).
+- [WANT] One-way / trap doors; entrance-style "insanity" — designed in `PLANNED.md`, gated on the guard.
+
+### Intro / cinematics / tutorial
+- [DONE/PLAY-VERIFIED] Skip the `.pss` logo movies — `skip_intro` binary patch (THQ confirmed gone).
+- [BLOCKED] Skip the in-engine story cinematic — neutering hangs the boot; it's button-skippable.
+  Auto-skip needs the skip-flag/state (TODO §5).
+- [BLOCKED] Disable the opening tutorial — mechanism found, not patched (TODO §4). Best path: pre-set
+  the masad tutorial flags at new-game init.
+
+### Audio / cosmetic
+- [DONE] Music+SFX shuffle — `music_shuffle`; music-only — `music_tracks_shuffle`; SFX — `sound_shuffle`.
+- [DONE] Icons, VFX, camera, fog, materials, models, animations, NPC behaviour — pre-existing shuffles.
+- [BLOCKED] New music / palette colour swaps / new models — undecoded formats (`.vmu`, `.peg`, `.mvf`).
+
+### Progression / pacing / modes
+- [DONE] XP scale / level cap / cutscene bypass / dialogue blank / instant fades — pre-existing.
+- [DONE] endgame_gate (binary) — lower the ending threshold.
+- [WANT] A "Power Trip" mode bundling 1-HP + max gear + fast XP + guaranteed drops (housekeeping §7).
+- [WANT] Ring Hunt / permadeath / roguelike modes — exist; keep tuning.
+- [BLOCKED] True "One Hour" mode / collectionthon — need a flag graph / a collection counter.
+
+### Platform / infra
+- [BLOCKED] Summoner 2 support (`SLUS-20448`) — the VPP v2 reader does not exist.
+- [WANT] Named modes for the new transforms + `FEATURES.md`/`MODES.md` updates once play-verified.
+- [WANT] Regenerate the `inventory.py` fixture (pre-fix; undercounts doors).
