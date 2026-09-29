@@ -226,27 +226,43 @@ class Report:
 
 
 def _shuffle_matches(blob: bytes, pattern: bytes, rng: Random, rep: Report,
-                     group: int = 1, label: str = "refs") -> bytes:
-    """Shuffle capture-group values among matches of equal length."""
+                     group: int = 1, label: str = "refs",
+                     exclude: "set[bytes] | None" = None) -> bytes:
+    """Shuffle capture-group values among matches of equal length.
+
+    `exclude` names are PINNED: they keep their own value AND are removed from the shuffle pool, so
+    nothing else lands on them either. This protects records the ENGINE references by hardcoded
+    name (e.g. the burning-village fire barrier "invis-door02", which the executable removes via a
+    literal string - renaming its record soft-locks the opening). See
+    docs/lab/ANALYSIS-invis-door02-fire-barrier.md.
+    """
     hits = list(re.finditer(pattern, blob))
     if not hits:
         rep.notes.append(f"no {label} found")
         return blob
+    excl = exclude or set()
     by_len: dict[int, list] = {}
     for m in hits:
         by_len.setdefault(len(m.group(group)), []).append(m)
     out = bytearray(blob)
+    pinned = 0
     for ln, ms in by_len.items():
-        if len(ms) < 2:
+        # only the movable matches take part in the shuffle; pinned ones stay put
+        movable = [m for m in ms if m.group(group) not in excl]
+        pinned += len(ms) - len(movable)
+        if len(movable) < 2:
             continue
-        vals = [m.group(group) for m in ms]
+        vals = [m.group(group) for m in movable]
         shuf = vals[:]
         rng.shuffle(shuf)
-        for m, v in zip(ms, shuf):
+        for m, v in zip(movable, shuf):
             if v != m.group(group):
                 rep.changed += 1
             out[m.start(group):m.end(group)] = v
-    rep.notes.append(f"{len(hits)} {label} across {len(by_len)} length classes")
+    note = f"{len(hits)} {label} across {len(by_len)} length classes"
+    if pinned:
+        note += f"; {pinned} pinned (engine-referenced, protected)"
+    rep.notes.append(note)
     return bytes(out)
 
 
@@ -272,11 +288,21 @@ def t_lock_shuffle(blob, rng):
     return bytes(out), rep
 
 
+# Door records the ENGINE removes/toggles by hardcoded name (see the burning-village fire barrier:
+# the executable calls remove_object("invis-door02") with a literal string). Renaming these records
+# means the hardcoded call no longer matches -> the object is never removed -> the opening
+# soft-locks. They are PINNED out of every name shuffle. Proof + call site:
+# docs/lab/ANALYSIS-invis-door02-fire-barrier.md.
+ENGINE_PINNED_DOOR_NAMES = {
+    b"invis-door01", b"invis-door02", b"invis-door03",
+}
+
+
 def t_door_name_shuffle(blob, rng):
-    """Shuffle $Door names among equal lengths."""
+    """Shuffle $Door names among equal lengths, pinning engine-referenced doors in place."""
     rep = Report("door_name_shuffle")
     return _shuffle_matches(blob, rb'\$Door:\s*"([^"]+)"', rng, rep,
-                            label="$Door names"), rep
+                            label="$Door names", exclude=ENGINE_PINNED_DOOR_NAMES), rep
 
 
 def t_door_sound_shuffle(blob, rng):
@@ -3334,7 +3360,8 @@ MODES = {
     },
     "doors": {
         "label": "Door Shuffle",
-        "blurb": "Door locks, names and sounds shuffled. No progression risk.",
+        "blurb": "Door locks, names and sounds shuffled. Engine-referenced doors (the "
+                 "burning-village fire barrier) are pinned so the opening cannot soft-lock.",
         "transforms": ["lock_shuffle", "door_name_shuffle", "door_sound_shuffle"],
         "risk": "low",
     },

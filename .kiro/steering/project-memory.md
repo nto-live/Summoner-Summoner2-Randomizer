@@ -70,17 +70,35 @@ Python in `src/` (`cli.py` front door, `rando_core.py` transforms, `binary.py` E
   with `$Protection`. Both distinct from creature `$Damage`/`$Protection` in `#Character Info`.
 - **Enemy XP on kill** = `$Experience Gained` inside hostile `#Character Info` blocks (109/80).
 - **Drops** = `+Drop: "Item" <chance 2..100>`, attached to attack/death records, not the stat block.
-- **Tutorial (SOLVED — `skip_tutorial` v3, play-verified)**: 17-step state machine (steps
-  `0x0023C868`..`0x0023D4A8`, table `0x0127DEE8`), dispatcher `FUN_0023D618`. THE WORKING PATCH:
-  NOP the tail advance-gate `0x0023D74C` (`beq s0,zero,0x0023d760` → `0x00000000`) so the
-  dispatcher advances the active tutorial every frame with no dismiss-button input. Tutorials
-  auto-complete, popups don't wait, and each step's scripted scene-action still runs (e.g.
-  `FUN_001DBF50("invis-door02")` removes the burning-village fire barrier — it clears on its own
-  short timer). PLAY-VERIFIED: tutorials off, opening plays through, fire drops. Enabled in
-  binary.py + build; UI toggle + `--binary skip_tutorial`. Dead ends (do not retry): v1 ignore-
-  global `0x0023D648`→li v0,1 = firewall soft-lock (skips step loop); v2 NOP activation
-  `0x0023D6B4` = scene stalls. Never patch shared `flag_is_set` `0x001F10A8` / `flag_set`
-  `0x001F11E8`. Full write-up: `docs/RESEARCH-SKIP-TUTORIAL.md`.
+- **Enemy XP on kill** = `$Experience Gained` in hostile `#Character Info`. (dup line above; keep one.)
+- **Tutorial off — use `skip_tutorial` (NOP the input-gate). This is THE working patch.** Mechanism
+  (proven, `docs/lab/ANALYSIS-why-v3-works.md`): dispatcher `ngps_process_tutorial` @`0x0023d618`
+  runs the active step then a tail that polls the pad and only calls the step-ADVANCE
+  (`jal 0x0023d5f0` @`0x0023d754`) when the taught button was pressed (`s0=1`), gated by
+  `0x0023D74C beq s0,zero,0x0023d760`. **`skip_tutorial` NOPs that gate** (`0x12000004`→0) so the
+  advance runs every frame with no input → steps auto-complete, popups don't hold you, scene
+  actions still run. PLAY-VERIFIED: no tutorials, player moves, fire drops. Minor quirk: auto-advance
+  can pass the dialogue step before the CONVERSATION sets `masad_dialogue_tutorial_part2b` (the flag
+  that gates the fire removal), so you may talk to the opening NPC 2-3× for the fire to drop — not a
+  soft-lock. Now labelled the working patch in `binary.py` (un-blocked, not experimental).
+  - **`hide_tutorials` is a DEAD END (blocked in binary.py).** It NOPs the two draw calls in
+    `ngps_render_tutorial` (`0x0023d824` box, `0x0023d8c0` text) so the popup window is hidden, BUT
+    it leaves the input-gate at `0x0023d74c` intact → the step still WAITS for the button + plays its
+    sound, so the player is frozen at the start with no instructions. Worse UX. Wrong lever.
+  - **Dead ends (do NOT retry):** early-return whole `ngps_render_tutorial` @`0x0023d780` = FROZE the
+    opening (its per-frame `sw v0,-0x3360(gp)` @`0x0023d8d4` is load-bearing). v1 force ignore-global
+    `0x0023D648`→li v0,1 = soft-lock. v2 NOP activation `0x0023D6B4` = stall. Never patch shared
+    `flag_is_set` `0x001F10A8` / `flag_set` `0x001F11E8`.
+  - **RESOLVED false alarms:** `enemies_random scope=per_level` does NOT break the fire (earlier
+    "froze"/"fire didn't drop" was just not talking to the NPC enough times — retracted). The fire
+    barrier `invis-door02` is removed by the executable via a HARDCODED string, so
+    `door_name_shuffle` could rename its record and soft-lock the opening — now FIXED: `invis-door0N`
+    are pinned in `t_door_name_shuffle` (verified across 8 seeds, `docs/lab/verify_door_pin.py`).
+- **Fire barrier `invis-door02`**: removed inside the dialogue-tutorial step
+  (`jal 0x001dbf50("invis-door02")` @`0x0023cb6c`), gated on `flag_is_set(masad_dialogue_tutorial_
+  part2b)` which the CONVERSATION sets. Full analysis: `docs/lab/ANALYSIS-invis-door02-fire-barrier.md`.
+- **Known-good shipping recipe:** `skip_intro` + `skip_tutorial` + the transform stack (see
+  `tools/builds/build_chaos.py`). Play-verified as CHAOS2.
 
 ## Where the open work is
 

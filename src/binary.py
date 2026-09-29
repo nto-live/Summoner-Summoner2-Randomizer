@@ -226,29 +226,84 @@ PATCHES: dict[str, Patch] = {
              "the in-engine story cinematic is a separate $Cutscene and is NOT removed by this "
              "patch (neutering it hangs the boot).",
     ),
-    # Skip the tutorials - the v3 "auto-advance" patch. The tutorial is a 17-step state machine
-    # (dispatcher FUN_0023D618). Its tail only advances the active tutorial when a dismiss button
-    # is polled (0x0023D74C `beq s0,zero,0x0023d760`). NOP-ing that branch makes the dispatcher
-    # advance every frame with no input, so each tutorial auto-completes and its scripted
-    # scene-action still runs (e.g. removing "invis-door02", the burning-village barrier) - the
-    # scene clears on its own short timer instead of waiting for you to read a popup.
+    # Skip the tutorials - THE WORKING PATCH (was called "v3"). The tutorial is a 17-step state
+    # machine; the dispatcher ngps_process_tutorial (0x0023d618) runs the active step, then a TAIL
+    # (0x0023d6d0..) polls the pad for the taught button and only calls the step-ADVANCE
+    # (jal 0x0023d5f0 @ 0x0023d754) when a button was pressed that frame. The gate is:
+    #   0x0023D74C: beq s0,zero,0x0023d760   (s0==1 iff a taught button was pressed this frame)
+    # NOP-ing that branch makes the advance run EVERY FRAME regardless of input, so each tutorial
+    # step auto-completes with no button press and control is never held. The popup is dismissed
+    # with the step and the scripted scene-actions still run. This is exactly the desired behaviour:
+    # no tutorial, player can move, opening progresses. Full disassembly proof + why hide_tutorials
+    # does NOT do this: docs/lab/ANALYSIS-why-v3-works.md.
     #
-    # History (for the record): v1 forcing the ignore-global (0x0023D648 -> li v0,1) early-outs
-    # before the step loop -> flag_sets never run -> firewall soft-lock. v2 NOP-ing the
-    # activate branch (0x0023D6B4) removed popups but stalled the scene. v3 (this) keeps the loop
-    # AND advances it: popups gone, scene still progresses. PROVEN IN GAME (the burning-village
-    # fire drops after a moment). See docs/RESEARCH-SKIP-TUTORIAL.md.
+    # PLAY-VERIFIED: no tutorials, player moves, burning-village fire drops. Known minor quirk: the
+    # every-frame advance can pass the dialogue-tutorial step before the CONVERSATION sets
+    # masad_dialogue_tutorial_part2b (the flag that gates the fire removal), so you may need to talk
+    # to the opening NPC 2-3 times for the fire to drop. Not a soft-lock; re-talking clears it.
+    #
+    # Dead ends (do NOT retry): v1 force ignore-global (0x0023D648 -> li v0,1) = firewall soft-lock;
+    # v2 NOP activate branch (0x0023D6B4) = scene stall; early-return ngps_render_tutorial = froze
+    # the opening; hide_tutorials (NOP the draw calls) = box gone but input-gate remains, player
+    # stuck with no instructions (WRONG LEVER). See docs/RESEARCH-SKIP-TUTORIAL.md.
     #   0x0023D74C: 0x12000004 (beq s0,zero,0x0023d760) -> 0x00000000 (nop)
     # Verified byte-for-byte against the retail ISO.
     "skip_tutorial": Patch(
         name="skip_tutorial",
         va=0x0023D74C,
         original=0x12000004,           # beq s0,zero,0x0023d760  (dispatcher tail advance gate)
-        encode=lambda p: 0x00000000,   # nop -> auto-advance tutorials every frame, no input needed
+        encode=lambda p: 0x00000000,   # nop -> advance every frame with no input = tutorials auto-skip
         label="Skip the tutorials",
-        help="Auto-completes the in-game tutorial popups so they do not wait for you to read and "
-             "dismiss them - the opening plays through on its own. The scripted scenes the "
-             "tutorials gate (the burning-village fire clearing, etc.) still fire. Executable patch.",
+        help="Turns off the opening tutorials: they auto-advance with no button press, so the popups "
+             "never hold you up and the opening plays straight through. The scripted scenes the "
+             "tutorials drive (the burning-village fire clearing, etc.) still happen. Executable "
+             "patch. Note: you may need to talk to the first NPC a couple of times for the "
+             "burning-village fire to drop.",
+    ),
+    # The CLEAN tutorial-off patch. The tutorial code (code/summoner/interface/ngps_interface/
+    # ngps_tutorial.o) splits into: step functions (do_*_tutorial) that SET the quest flags the
+    # firewall depends on, the dispatcher ngps_process_tutorial @0x0023d618, and the display
+    # routine ngps_render_tutorial @0x0023d780.
+    #
+    # IMPORTANT (learned the hard way): ngps_render_tutorial is NOT draw-only. Early-returning the
+    # whole function FROZE the opening (NPC could not move, scene did not load) because the function
+    # also does load-bearing work every frame - notably `sw $v0,-0x3360($gp)` at 0x0023d8d4 (a
+    # "rendered this frame" flag the scene state machine polls) plus layout/build helper calls.
+    #
+    # A full disassembly (docs/lab/probe_render_disasm.py) shows exactly six calls. Only TWO are
+    # pure output - the visible popup:
+    #   0x0023d824  jal 0x0022b158   draw the popup PANEL/BOX  (x/y/size, no text)
+    #   0x0023d8c0  jal 0x00133608   draw a TEXT LINE          (loop body, once per line)
+    # The other four (context query 0x001333c0, text-measure 0x00133af0, colour-set 0x0013bf60,
+    # per-line string build 0x00267418) plus the -0x3360($gp) flag write are left running.
+    #
+    # So hide_tutorials NOPs ONLY those two jal words. No box, no text drawn.
+    #   0x0023d824: 0x0C08AC56 (jal 0x0022b158) -> 0x00000000 (nop)
+    #   0x0023d8c0: 0x0C04CD82 (jal 0x00133608) -> 0x00000000 (nop)
+    # Both originals verified byte-for-byte against the retail ISO (docs/lab/probe_two_draws.py).
+    #
+    # WRONG LEVER - do NOT ship this. PLAY-TESTED: the popup window is gone, BUT the tutorial
+    # STEP's input-gate (in ngps_process_tutorial, 0x0023d74c) is untouched, so the step still
+    # WAITS for the taught button press before advancing and still plays its sound cue. Result: the
+    # player is frozen at the start with no on-screen instructions - worse UX than leaving tutorials
+    # on. The correct patch is `skip_tutorial`, which NOPs the input-GATE so steps auto-advance.
+    # Full disassembly proof: docs/lab/ANALYSIS-why-v3-works.md. Kept in the catalogue as a marked
+    # dead-end; blocked so it cannot be applied.
+    "hide_tutorials": Patch(
+        name="hide_tutorials",
+        va=0x0023D824,
+        original=0x0C08AC56,           # jal 0x0022b158  (tutorial popup box draw)
+        encode=lambda p: 0x00000000,   # nop -> box never drawn
+        extra=[
+            # the per-line text draw inside the loop
+            (0x0023D8C0 - 0x0023D824, 0x0C04CD82, 0x00000000),  # jal 0x00133608 -> nop
+        ],
+        label="Hide the tutorials (dead-end, do not use)",
+        help="DEAD END - use 'skip_tutorial' instead. Hides the tutorial popup window but leaves the "
+             "step's input-gate active, so the player is frozen at the start waiting for a button "
+             "press with no instructions on screen. Documented wrong lever; disabled.",
+        blocked="wrong lever: hides the popup but leaves the input-gate, freezing the opening. "
+                "Use skip_tutorial (NOPs the gate instead). See docs/lab/ANALYSIS-why-v3-works.md.",
     ),
 }
 

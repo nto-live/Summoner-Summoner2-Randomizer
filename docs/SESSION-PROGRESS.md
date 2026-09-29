@@ -91,3 +91,69 @@ it risks the same boot hang the cutscene neuter caused. Full detail in `PLANNED.
 3. **Fast leveling** — enemies give 9999 XP; kill one, confirm level jumps.
 4. **Guaranteed drops / 1-HP enemies / buffed gear** — as designed.
 5. **Movies** — THQ logo gone; story intro still needs a manual button-skip.
+
+---
+
+# Session progress — 2026-09-29
+
+The tutorial-off day. Goal reframed by the user: this is a tool a stranger runs through the UI to
+make a randomised ISO, so tutorial-off must be RELIABLE, not a recipe that limped through once.
+
+## Headline
+
+**Understood and fixed tutorial-off.** `skip_tutorial` (NOP the dispatcher input-gate at
+`0x0023D74C`) is THE working patch: tutorials auto-advance with no button press, the opening plays
+through, the player can move, and the burning-village fire drops. Proven by disassembly
+(`docs/lab/ANALYSIS-why-v3-works.md`) and play. Also closed a real end-user soft-lock:
+`door_name_shuffle` could rename the fire barrier `invis-door02` (the engine removes it by hardcoded
+string) — now pinned. Rebuilt the CHAOS disc with `skip_tutorial` + the full stack.
+
+## What we learned (the mechanism, finally grounded in disassembly)
+
+- The tutorial is a 17-step machine. The dispatcher `ngps_process_tutorial` (`0x0023d618`) advances
+  the active step (`jal 0x0023d5f0` @`0x0023d754`) ONLY when the taught button was pressed that
+  frame (`s0=1`), gated by `0x0023D74C beq s0,zero,0x0023d760`.
+- **`skip_tutorial`** NOPs that gate → advance runs every frame with no input → tutorials
+  auto-complete, popups don't hold you, scripted scene-actions still run. Correct lever.
+- **`hide_tutorials`** (NOP the two draw calls in `ngps_render_tutorial`) hides the popup window but
+  leaves the input-gate → player frozen at the start with no instructions. WRONG lever; now blocked.
+- Fire barrier `invis-door02` is removed inside the dialogue-tutorial step, gated on
+  `masad_dialogue_tutorial_part2b`, which the CONVERSATION sets — hence "talk to the NPC 2-3 times"
+  (auto-advance can pass the dialogue step before the flag is set). Minor, non-blocking quirk.
+
+## Changes shipped this session
+
+| Change | File | Verified |
+|---|---|---|
+| `skip_tutorial` promoted to the working patch (un-blocked, relabelled) | `src/binary.py` | byte-verified; play-verified as CHAOS2 |
+| `hide_tutorials` marked dead-end + `blocked` (refuses to apply) | `src/binary.py` | verified via `cli.py --list` |
+| `door_name_shuffle` pins `invis-door0N` (fixes opening soft-lock in Door Shuffle / Everything modes) | `src/rando_core.py` | verified across 8 seeds (`docs/lab/verify_door_pin.py`) |
+| "No progression risk" blurb on Door Shuffle mode corrected | `src/rando_core.py` | — |
+
+## Dead ends confirmed (do NOT retry)
+
+- Early-return whole `ngps_render_tutorial` (`0x0023d780` → jr ra) = froze opening (load-bearing
+  per-frame flag write `sw v0,-0x3360(gp)` @`0x0023d8d4`).
+- v1 force ignore-global (`0x0023D648`→li v0,1) = soft-lock. v2 NOP activation (`0x0023D6B4`) = stall.
+- Blaming `enemies_random scope=per_level` for the fire — FALSE ALARM (just needed more NPC talks).
+
+## Docs added
+
+- `docs/lab/ANALYSIS-why-v3-works.md` — the definitive disassembly of the input-gate.
+- `docs/lab/ANALYSIS-invis-door02-fire-barrier.md` — what removes the fire and what gates it.
+- `docs/FINDINGS-TUTORIAL-2026-09-29.md` — the full investigation narrative.
+- Lab probes under `docs/lab/` (all read-only, no game data): tutorial text/prose/strings, render
+  disasm, process disasm, draw callers, two-draws verify, door-pin verify, drop-quantity probe.
+
+## Shipping recipe (play-verified as CHAOS2)
+
+`tools/builds/build_chaos.py` → `skip_intro` + `skip_tutorial` + enemy/gear/xp/drop/door stack.
+Hand to Joshua with the honest note: "at the burning village, talk to the first NPC 2-3 times for
+the fire to drop — not a soft-lock."
+
+## Open / next
+
+- The 2-3-talk quirk could be removed with a conditional auto-advance (let the dialogue step persist
+  until `part2b`), but it's playable as-is — deferred, documented.
+- Selective boot-movie skip (skip some `.pss` logos but not others) was discussed; needs the user to
+  confirm the on-screen movie order before targeting individual call sites. Not started.
