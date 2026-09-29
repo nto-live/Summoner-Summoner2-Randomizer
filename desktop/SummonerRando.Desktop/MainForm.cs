@@ -452,7 +452,11 @@ public sealed class MainForm : Form
         PopulateBinaryPatches();
 
         if (_cmbMode.Items.Count > 0)
-            _cmbMode.SelectedIndex = IndexOfMode("vanilla");
+            // Default to the first BUILDABLE mode, not `vanilla`: vanilla is a reference
+            // baseline and the engine refuses to build it, so selecting it by default
+            // would greet the user with an error. `vanilla_no_tutorial` is the intended
+            // default - retail with exactly one lever moved.
+            _cmbMode.SelectedIndex = FirstBuildableMode();
 
         _txtPending.Text = BuildPendingText(_list);
         Log($"Loaded {_list.Modes.Count} modes, {_list.Transforms.Count} transforms, " +
@@ -465,6 +469,18 @@ public sealed class MainForm : Form
         if (_list is null) return 0;
         for (int i = 0; i < _cmbMode.Items.Count; i++)
             if (_cmbMode.Items[i] is ModeInfo m && m.Key == key) return i;
+        return 0;
+    }
+
+    /// <summary>
+    /// Index of the first mode that can actually be built. Non-buildable modes
+    /// (<c>vanilla</c>) are selection-legal but not build-legal, so they must never be
+    /// the default - that would hand the user a button that is guaranteed to fail.
+    /// </summary>
+    private int FirstBuildableMode()
+    {
+        for (int i = 0; i < _cmbMode.Items.Count; i++)
+            if (_cmbMode.Items[i] is ModeInfo m && m.Buildable) return i;
         return 0;
     }
 
@@ -536,6 +552,14 @@ public sealed class MainForm : Form
     {
         if (_list is null || _cmbMode.SelectedItem is not ModeInfo m)
             return;
+
+        // A non-buildable mode (vanilla) is a comparison baseline: the engine refuses to
+        // build it, so do not offer the action. Say why, rather than leaving a dead
+        // button with no explanation.
+        _btnBuild.Enabled = m.Buildable;
+        if (!m.Buildable)
+            SetStatus("Vanilla is a reference baseline - there is nothing to build. "
+                      + "Use 'Vanilla \u00b7 No Tutorials' for a disc that still differs from retail.");
 
         var set = new HashSet<string>(m.Transforms, StringComparer.Ordinal);
         foreach (DataGridViewRow row in _dgv.Rows)

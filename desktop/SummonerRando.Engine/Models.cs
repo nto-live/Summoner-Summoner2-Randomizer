@@ -46,7 +46,17 @@ public sealed class ModeInfo
     public JsonElement? Options { get; init; }
     public bool HasBinary { get; init; }
 
-    public string Display => Label.Length > 0 ? Label : Key;
+    /// <summary>
+    /// False for a mode that selects nothing (<c>vanilla</c>): it is a comparison
+    /// baseline, so building it would write a byte-identical copy of the source. The
+    /// engine refuses such a build, so the UI must say so up front instead of letting
+    /// the user press a button that is guaranteed to fail. Absent in the payload means
+    /// buildable, so older payloads keep working.
+    /// </summary>
+    public bool Buildable { get; init; } = true;
+
+    public string Display => (Label.Length > 0 ? Label : Key)
+        + (Buildable ? "" : "  (reference only)");
 }
 
 public sealed class OptionChoice
@@ -132,6 +142,8 @@ public sealed class ListPayload
                     Transforms = tf,
                     Options = m.Prop("options"),
                     HasBinary = hasBinary,
+                    Buildable = m.Prop("buildable") is not JsonElement bp
+                                || bp.ValueKind != JsonValueKind.False,
                 });
             }
         }

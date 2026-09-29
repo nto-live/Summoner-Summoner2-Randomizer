@@ -3354,9 +3354,15 @@ for _n in _SHUFFLE_SPECS:
 MODES = {
     "vanilla": {
         "label": "Vanilla",
-        "blurb": "No changes. Baseline for comparing against.",
+        "blurb": "No changes. Baseline for comparing against - a reference, not a build "
+                 "target, because there is nothing to change. Use Vanilla \u00b7 No Tutorials "
+                 "if you want a disc that still differs from retail by one lever.",
         "transforms": [],
         "risk": "none",
+        # Selection is legal (it is how you compare), building is not (it would write a
+        # byte-identical copy of the source). The engine refuses with a reason and the
+        # UI must not offer it as a build target. See docs/TEST-PLAN.md defect D6.
+        "buildable": False,
     },
     # "Vanilla minus X" - the retail game with exactly ONE lever moved. The point is
     # isolation: a disc that differs from retail by a single change is the only honest
@@ -3694,6 +3700,42 @@ MODES = {
         "transforms": [],
         "binary": [["skip_intro", {}]],
         "risk": "low - presentation only; play-verified (boot logos gone)",
+    },
+    # ---- Modes added to give the 2026-09-28 levers a home ---------------------------
+    # Nine transforms shipped with no mode referencing them, so a user browsing the mode
+    # list could not find them at all (docs/FEATURES-REGISTER.md \u00a75, defect D4).
+    # They fall into three coherent groups, so they get three modes rather than one
+    # kitchen sink. Every option below is the transform's own default, stated explicitly
+    # so the mode reads as a promise instead of depending on a default that may move.
+    "power_trip": {
+        "label": "Power Trip",
+        "blurb": "You are the boss fight. Every enemy dies in one hit and barely scratches "
+                 "you, your weapons and armour are pinned to the top of their fields, every "
+                 "kill pays maximum XP, and anything that can drop an item does. Nothing is "
+                 "randomised - this is a straight power fantasy, for blasting through the "
+                 "story or checking a later area early.",
+        "transforms": ["enemy_hp_set", "enemy_damage_set", "weapon_attack_max",
+                       "armor_protect_max", "enemy_xp_set", "enemy_drops_always"],
+        "options": {"enemy_hp_set": {"value": 1}, "enemy_damage_set": {"value": 0},
+                    "enemy_xp_set": {"value": 9999}},
+        "risk": "high - trivialises combat by design; untested in game",
+    },
+    "random_rewards": {
+        "label": "Random Rewards",
+        "blurb": "Kills stop being predictable: how much XP a creature is worth and which "
+                 "item it drops are both shuffled between creatures. A trash mob can pay a "
+                 "boss's XP. Shuffling, not inflating - the average is unmoved, only who "
+                 "pays what changes.",
+        "transforms": ["enemy_xp_random", "enemy_drops_random"],
+        "risk": "low - rewards move between enemies; no totals changed",
+    },
+    "music_only": {
+        "label": "Music Only",
+        "blurb": "The background music is shuffled and nothing else is touched - the wrong "
+                 "track plays in the wrong place, but every sound effect stays correct. The "
+                 "gentlest mode in the list; useful on its own or stacked onto another.",
+        "transforms": ["music_tracks_shuffle"],
+        "risk": "low - music only, no sound effects, no progression risk",
     },
 }
 

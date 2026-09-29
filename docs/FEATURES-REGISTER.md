@@ -8,12 +8,12 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 
 | | count |
 |---|---|
-| Modes | 40 |
+| Modes | 43 |
 | Transforms | 54 |
 | Option-bearing transforms | 19 |
 | Binary (executable) patches | 4 |
 | Blocked / pending, with a recorded reason | 6 |
-| Transforms not reachable from any mode | 9 |
+| Transforms not reachable from any mode | 0 |
 
 **State key.** `play-verified` — a human watched it work · `boot-verified` — reaches gameplay under the harness · `build-verified` — the engine applied it, size preserved, edits confined to declared fields · `blocked` — refuses to run, reason recorded.
 
@@ -25,7 +25,7 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 
 - **Tier:** `play-verified`
 - **Risk:** none
-- No changes. Baseline for comparing against.
+- No changes. Baseline for comparing against - a reference, not a build target, because there is nothing to change. Use Vanilla · No Tutorials if you want a disc that still differs from retail by one lever.
 
 ### `vanilla_no_tutorial` — Vanilla · No Tutorials
 
@@ -309,13 +309,35 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 - **Binary patches:** `skip_intro`
 - Stops the boot/intro video from playing: it makes the movie-player routine return immediately, which neutralises every boot-movie call at once. The intro is not in the script layer (zero .pss refs), so this is an executable patch. Play-verified - the THQ logo is gone. NOTE: this removes the .pss FMV logos; the in-engine story cinematic is a separate $Cutscene and is NOT removed by this patch (neutering it hangs the boot).
 
+### `power_trip` — Power Trip
+
+- **Tier:** `build-verified`
+- **Risk:** high - trivialises combat by design; untested in game
+- **Transforms (6):** `enemy_hp_set`, `enemy_damage_set`, `weapon_attack_max`, `armor_protect_max`, `enemy_xp_set`, `enemy_drops_always`
+- **Options preset:** `enemy_hp_set.value=1`, `enemy_damage_set.value=0`, `enemy_xp_set.value=9999`
+- You are the boss fight. Every enemy dies in one hit and barely scratches you, your weapons and armour are pinned to the top of their fields, every kill pays maximum XP, and anything that can drop an item does. Nothing is randomised - this is a straight power fantasy, for blasting through the story or checking a later area early.
+
+### `random_rewards` — Random Rewards
+
+- **Tier:** `build-verified`
+- **Risk:** low - rewards move between enemies; no totals changed
+- **Transforms (2):** `enemy_xp_random`, `enemy_drops_random`
+- Kills stop being predictable: how much XP a creature is worth and which item it drops are both shuffled between creatures. A trash mob can pay a boss's XP. Shuffling, not inflating - the average is unmoved, only who pays what changes.
+
+### `music_only` — Music Only
+
+- **Tier:** `build-verified`
+- **Risk:** low - music only, no sound effects, no progression risk
+- **Transforms (1):** `music_tracks_shuffle`
+- The background music is shuffled and nothing else is touched - the wrong track plays in the wrong place, but every sound effect stays correct. The gentlest mode in the list; useful on its own or stacked onto another.
+
 ## 2. Transforms
 
 | transform | what it does | options | used by |
 |---|---|---|---|
 | `action_shuffle` | Shuffles +Action verbs — the AI and script instructions. Characters do the wrong things. Actions drive scripted sequences, so this CAN break them. | — | 2 (behaviour_chaos, total_chaos) |
 | `animation_shuffle` | Shuffles $Animation and +Animation class, so characters perform the wrong movements. | — | 3 (everything...) |
-| `armor_protect_max` | Sets every armour item's $Protection to one high value (default 999, clamped into each field's own width). Scoped to $Armor: record spans, so creature protection is never touched. Size-preserving. ... | `value` | 0 |
+| `armor_protect_max` | Sets every armour item's $Protection to one high value (default 999, clamped into each field's own width). Scoped to $Armor: record spans, so creature protection is never touched. Size-preserving. ... | `value` | 1 (power_trip) |
 | `camera_shuffle` | Shuffles $Camera and .csc, so cutscenes are shot from the wrong angles. | — | 3 (everything...) |
 | `chest_items` | Shuffles WHAT a container yields — the +Messagebox: name in a block that also carries +Give: — between equal-length names, so a cheap crate can hold something precious. The amount is not touched. | `how` | 1 (chest_shuffle) |
 | `chest_shuffle` | Shuffles +Give payouts among equal widths. Most single digits are item counts, so only the multi-digit gold payouts really move. | — | 6 (everything...) |
@@ -332,14 +354,14 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 | `enemies_none` | Unlinks every monster placement (2,220 of them) from the navpoint it spawns on, and optionally re-teams the hostile creature definitions. Nothing added, nothing moved. | `how` | 1 (peaceful) |
 | `enemies_random` | Swaps which creature stands on each monster placement, and its +Level:, between equal-length values only. | `scope` | 2 (invasion, oops_all_enemies) |
 | `enemies_swarm` | Re-points peaceful placements (NPCs, props, shopkeepers) at hostile creatures. Far more enemies to fight, at the cost of the people who lived there. | — | 1 (invasion) |
-| `enemy_damage_set` | Sets every hostile creature's $Damage to one value you choose (default 0 = they barely hurt you). Summoner enemies have no defence stat, so lowering their damage is the way to make them softer. Wea... | `value` | 0 |
+| `enemy_damage_set` | Sets every hostile creature's $Damage to one value you choose (default 0 = they barely hurt you). Summoner enemies have no defence stat, so lowering their damage is the way to make them softer. Wea... | `value` | 1 (power_trip) |
 | `enemy_difficulty` | The dial: scales hostile creature stats and placement levels from trivial through easy / normal / hard / brutal / deadly to impossible, inside each field's own width. | `level`, `level_shift` | 2 (impossible, easy_enemies) |
-| `enemy_drops_always` | Maxes every enemy +Drop chance (to 100 where the field allows), so any enemy that can drop an item almost always does. Cannot add a drop to an enemy that has none (that needs extra bytes). Size-pre... | — | 0 |
-| `enemy_drops_random` | Shuffles which item each enemy `+Drop:` yields, among equal-length item names. The drop-chance weight is left alone, so rates are unchanged - only WHAT drops moves. Nothing is invented or lost. Siz... | — | 0 |
-| `enemy_hp_set` | Sets every hostile creature's $Max Hit Points and $Hit Points to one value you choose, padded into each field's own width (all-9s clamp if it will not fit). HP only - attack, damage and level are l... | `value` | 0 |
+| `enemy_drops_always` | Maxes every enemy +Drop chance (to 100 where the field allows), so any enemy that can drop an item almost always does. Cannot add a drop to an enemy that has none (that needs extra bytes). Size-pre... | — | 1 (power_trip) |
+| `enemy_drops_random` | Shuffles which item each enemy `+Drop:` yields, among equal-length item names. The drop-chance weight is left alone, so rates are unchanged - only WHAT drops moves. Nothing is invented or lost. Siz... | — | 1 (random_rewards) |
+| `enemy_hp_set` | Sets every hostile creature's $Max Hit Points and $Hit Points to one value you choose, padded into each field's own width (all-9s clamp if it will not fit). HP only - attack, damage and level are l... | `value` | 1 (power_trip) |
 | `enemy_stats_random` | Shuffles the hostile creatures' own numbers — hit points, ability points, aggression, attack radius, view/detection range, movement rates — among each other. enemy_difficulty scales these; this mov... | `style`, `hp` | 3 (enemy_stats...) |
-| `enemy_xp_random` | Shuffles $Experience Gained among hostile creatures, so how much XP a mob is worth on death is scrambled - a trash mob may pay a boss's XP and vice-versa. Separate from the global XP multipliers an... | `style` | 0 |
-| `enemy_xp_set` | Sets every hostile creature's $Experience Gained to one value you choose, clamped per field to the largest number that fits its width. Set it high to level up fast. Separate from the global XP mult... | `value` | 0 |
+| `enemy_xp_random` | Shuffles $Experience Gained among hostile creatures, so how much XP a mob is worth on death is scrambled - a trash mob may pay a boss's XP and vice-versa. Separate from the global XP multipliers an... | `style` | 1 (random_rewards) |
+| `enemy_xp_set` | Sets every hostile creature's $Experience Gained to one value you choose, clamped per field to the largest number that fits its width. Set it high to level up fast. Separate from the global XP mult... | `value` | 1 (power_trip) |
 | `fade_instant` | Zeroes every scene fade duration, so the pauses between scenes, cutscenes and level loads disappear. Presentation only. | — | 3 (total_chaos...) |
 | `fog_shuffle` | Shuffles $Fog values so each level's atmosphere and draw distance changes. | — | 3 (everything...) |
 | `icon_shuffle` | Shuffles $Icon and .vbm refs, so items and gear display the wrong art. | — | 5 (everything...) |
@@ -350,7 +372,7 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 | `material_shuffle` | Shuffles $Material / $Mat names — colour swaps wherever those records exist. | — | 3 (chaos...) |
 | `model_ref_shuffle` | .mvf model references reshuffled among equal lengths. | — | 3 (chaos...) |
 | `music_shuffle` | Shuffles $Soundtrack / $Sound — the wrong track plays in the wrong place. | — | 5 (everything...) |
-| `music_tracks_shuffle` | Shuffles the background music tracks ($Soundtrack) among equal-length names, so the wrong track plays in the wrong place - but sound effects are left alone. Use music_shuffle instead if you want SF... | — | 0 |
+| `music_tracks_shuffle` | Shuffles the background music tracks ($Soundtrack) among equal-length names, so the wrong track plays in the wrong place - but sound effects are left alone. Use music_shuffle instead if you want SF... | — | 1 (music_only) |
 | `npc_character_shuffle` | Shuffles $Character values — who stands where changes. | — | 3 (chaos...) |
 | `permadeath` | Disables the revive ability and neutralises Revive Scroll pickups so death sticks. Both are table-defined. Risky: an unknown name may error. | `block_ability`, `block_items` | 1 (hardcore) |
 | `player_stats_random` | Shuffles the playable party's numbers among themselves — HP, ability points, aggression, ranges and turn rates (this game has no Str/Dex/Int). style=floor keeps each value in its own width tier; st... | `style` | 2 (player_stats, stat_chaos) |
@@ -363,7 +385,7 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 | `sound_shuffle` | Shuffles every .wav reference, so the wrong noise plays everywhere. Very audible, no progression risk. | — | 6 (everything...) |
 | `spawn_shuffle` | Shuffles $Start position anchors, so NPCs and creatures appear at other points in the level. Relocates who stands where. | — | 6 (everything...) |
 | `vfx_shuffle` | Shuffles .vfx references — the wrong visual effect fires for a spell. | — | 3 (everything...) |
-| `weapon_attack_max` | Sets every weapon's $Damage to one high value (default 999, clamped into each field's own width). Scoped to weapon records by the adjacent $Damage Type marker, so creature damage is never touched. ... | `value` | 0 |
+| `weapon_attack_max` | Sets every weapon's $Damage to one high value (default 999, clamped into each field's own width). Scoped to weapon records by the adjacent $Damage Type marker, so creature damage is never touched. ... | `value` | 1 (power_trip) |
 | `xp_boost` | Scales every +AddXP: reward up inside its own digit width. Kills the grind. In-game effect unverified. | — | 6 (short...) |
 | `xp_nerf` | Scales every +AddXP: reward DOWN, so you cannot out-level the content. Roguelike pressure — encounters stay dangerous the whole run. | — | 3 (roguelike...) |
 | `xp_scale` | Scales every +AddXP: reward by a percentage you choose. 100 = vanilla, 300 = triple, 33 = a third. Deterministic, so difficulty is not a dice roll. | `percent` | 1 (progression) |
@@ -391,18 +413,4 @@ These are the honest gaps. Each carries a `blocked_by`, so no one has to re-deri
 | `level_order` | ELF analysis / MAIN.MAP symbols | Needs the runtime numeric level-ID -> name table, which appears to live in SLUS_200.74. |
 | `one_hour_mode` | flag graph solver | Needs the full flag graph plus a reachability solver so seeds can never be unbeatable. |
 | `character_models` | .mvf format | CHARS.VPP holds 2,556 .mvf files; the format is undecoded. |
-
-## 5. Transforms not reachable from any mode
-
-Implemented and listed, but no mode bundles them. Either wire them into a mode or the work is invisible to a user.
-
-- `armor_protect_max`
-- `enemy_damage_set`
-- `enemy_drops_always`
-- `enemy_drops_random`
-- `enemy_hp_set`
-- `enemy_xp_random`
-- `enemy_xp_set`
-- `music_tracks_shuffle`
-- `weapon_attack_max`
 

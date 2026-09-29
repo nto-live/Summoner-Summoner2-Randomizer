@@ -319,13 +319,17 @@ def cmd_build(a) -> int:
         # nothing to write. Say so usefully instead of returning a bare error - a user
         # who picked "Vanilla" in the UI needs to know this is expected and what the
         # mode is actually for, not that their build is broken.
+        spec = rc.MODES.get(a.mode or "", {})
         _emit({
             "error": "nothing selected to randomize",
             "mode": a.mode,
-            "hint": ("No disc was written. 'vanilla' is the no-change baseline, so there "
-                     "is nothing to change - compare against the retail ISO directly "
-                     "with --verify <built.iso> --against <retail.iso>. Pick a mode "
-                     "that changes something, or pass --transforms / --binary."),
+            "buildable": spec.get("buildable", True),
+            "hint": ("No disc was written. 'vanilla' is the no-change baseline: there is "
+                     "nothing to change, so building would just copy the source. Compare "
+                     "against the retail ISO directly with --verify <built.iso> "
+                     "--against <retail.iso>. If you want a disc that still differs from "
+                     "retail by one lever, use 'vanilla_no_tutorial'. Or pick a mode that "
+                     "changes something, or pass --transforms / --binary."),
         })
         return 1
 
