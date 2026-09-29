@@ -7,6 +7,10 @@ changes, and writes a new disc image you can play in PCSX2 or on real hardware.
 the disc; it only ever writes a new ISO into `work/out/` on this machine. There is no
 upload, no share, and no download endpoint.
 
+**Project site:** <https://summoner-randomizer.pages.dev> — the build log, the honest feature
+table, the roadmap and the FAQ. Progress is logged there as it happens.
+**Source:** this repository.
+
 ---
 
 ## What the end user actually gets
