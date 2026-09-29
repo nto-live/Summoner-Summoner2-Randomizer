@@ -34,7 +34,7 @@ it is all written down, and re-deriving it has already cost days.
 | **Doors** | **SOLVED** — mechanism found, 218-patch remap built, applied clean, disc **boots** |
 | **Door remap in game** | **VERIFIED 2026-09-21** — two discs differing only in one rewritten `$Trigger:` name load two different levels, read straight off the live game. `DOOR-REMAP.md` §4.5 |
 | **Door remap in the engine** | **DONE** — `door_destination_remap` is a real seed-driven transform, mode `door_remap`, constraints enforced and refused. No `DATA_PATCHES` class was needed |
-| **Active work** | **the two stat items** — `player_stats_random` / `enemy_stats_random` (`PLANNED.md` §1.4) |
+| **Active work** | **the reachability guard** — a flag graph + solver, the gate on the highest-risk feature (`door_remap` changes the level graph and nothing yet checks the world stays completable). The two stat items ARE built. Verification tiers every claim must reach: `docs/TEST-PLAN.md`. |
 | **Owner's directive** | *"Iterate on this until you get a patched working copy. First feature is the doors."* |
 
 ## The next action, specifically
@@ -156,6 +156,8 @@ python F:\rando\S1\notes\verify_doors.py
 | `RESEARCH-ENTRANCE-LOGIC.md` | **how doors are solved genre-wide** — logic tiers, constraints, mode taxonomy, PNACH |
 | `TIMER-DESIGN.md` | timed runs (deferred by request, design recorded) |
 | `PLANNED.md` | **the to-be-implemented log**: state, mechanism and acceptance for every decided-but-unbuilt item |
+| `TEST-PLAN.md` | **how a feature earns the right to be called done** — tiers T0–T4, suites A–F, the acceptance bar per class, and the defect list that prompted it |
+| `FEATURES-REGISTER.md` | the catalogue **generated** from `cli.py --list`, so it cannot drift from the code (43 modes / 54 transforms / 4 binary patches) |
 | `F:\rando\S1\notes\pcsx2-headless-FINDINGS.md` | the full headless write-up, including dead ends |
 | `F:\rando\S1\notes\door-mechanism.md` | the doors analysis: trigger records, the `#Triggers` parser, 51-level inventory, patch strategies |
 | `F:\rando\S1\notes\door-triggers.json` · `door-remap-example.json` | the 218 doors, and the 218 concrete patches |

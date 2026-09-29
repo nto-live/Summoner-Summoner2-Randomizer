@@ -81,8 +81,13 @@ it Summoner 2 it will say so plainly rather than appearing to do nothing.
 
 ### Modes
 
-**25 modes, 33 transforms.** The full list, with measured edit counts and every per-mode
-option, is in **`MODES.md`**.
+**43 modes, 54 transforms.** The full list, with measured edit counts and every per-mode
+option, is in **`MODES.md`**. `docs/FEATURES-REGISTER.md` is the same catalogue **generated**
+from `cli.py --list`, so it cannot silently disagree with the code.
+
+`Vanilla` is a **reference baseline, not a build target** - it selects nothing, so there is
+nothing to change and the engine refuses to build it. If you want a disc that still differs
+from retail by exactly one lever, use **`Vanilla · No Tutorials`**.
 
 Highlights: **Door Shuffle** · **Item Scatter** · Shop Shuffle · Chest Shuffle · Dialogue
 Chaos · Sound and Visual Chaos · **Ring Hunt** and **Ring Hunt · Any Ring** (they change *how
@@ -158,14 +163,21 @@ MODES.md          every mode and option, with real edit counts
 PROJECT.md        the full project document
 DOOR-REMAP.md     doors — mechanism, patch format, the 218-patch proof, DATA_PATCHES design
 COMPILED-CODE.md  Ghidra toolchain, portal mechanism, the binary patcher
+TEST-PLAN.md      how a feature earns the right to be called done: tiers T0-T4, suites A-F
+docs/FEATURES-REGISTER.md  GENERATED from cli.py --list - modes, transforms, options, blocked
+tools/            gen-feature-register.py  regenerates the register from the engine
+                  test-build-matrix.py     suite C - builds a real disc per mode
+                  test-gui-parity.py       suite D - the GUI cannot offer what the engine refuses
+requirements.txt  test deps (pytest, hypothesis); the engine itself is stdlib
 RESEARCH-SOTN.md  techniques consumed from the SotN randomizer
 TIMER-DESIGN.md   timed runs (deferred by request)
 _legacy-web-ui/   the retired server + browser UI, kept for the record
 work/out/         generated ISOs
 ```
 
-Only third-party requirement: `pycdlib` (`python -m pip install pycdlib`), used to read
-the ISO9660 directory. Everything else is the standard library.
+Only third-party requirements: `pycdlib` (`python -m pip install pycdlib`) to read the
+ISO9660 directory, and `pytest` + `hypothesis` (`python -m pip install -r requirements.txt`)
+to run the test suite. The engine itself is the standard library.
 
 ## Playing a build
 
@@ -190,6 +202,32 @@ $env:QT_QPA_PLATFORM = 'windows'
 
 `F:\rando\S1\notes\pcsx2_headless_boot.ps1` wraps this — it sets the value, runs with a
 timeout, samples CPU, keeps a copy of `emulog.txt` and prints **PASS/PARTIAL/FAIL**.
+
+## Testing the code itself
+
+The engine has a test suite, plus two suites that check what actually lands on disk. All of it
+is offline and needs no emulator:
+
+```powershell
+python -m pip install -r requirements.txt
+python -m pytest tests -q                  # suite B - engine property tests
+python tools\gen-feature-register.py       # suite A - catalogue matches the code
+python tools\test-build-matrix.py          # suite C - build a REAL disc per mode (--quick for 6)
+python tools\test-gui-parity.py            # suite D - the desktop app's parity with the engine
+```
+
+Suite C asserts, per mode: exit 0, output written, **byte-size identical to the source**, the
+engine's own report agreeing, a mode with levers actually reporting edits, every transform the
+mode lists appearing in the report, the container still identifying, and every binary patch
+applied with all words read back. It is the difference between "the engine works" and "a user
+who describes what they want in the UI gets a working disc".
+
+Suite D runs the real WinForms app headless and checks it cannot offer something the engine
+refuses (a blocked patch) and cannot hide something it can (any of the 43 modes).
+
+The tiers a claim may reach - and who is allowed to make which claim - are defined in
+**`docs/TEST-PLAN.md`**, with the defect list that prompted it. The short version: **a claim is
+only worth the evidence behind it, and one play is not verification.**
 
 ## Rules this project holds to
 
