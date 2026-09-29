@@ -1,0 +1,602 @@
+{
+  "_note": "Authoritative level->script map parsed from script_filenames.tbl in TABLES.VPP. NAMES only (derived metadata, like door-triggers.json). No game data bytes.",
+  "iso": "Summoner (USA).iso",
+  "tables_base": 1225287680,
+  "table_body_vpp": [
+    5841096,
+    5848760
+  ],
+  "table_body_iso": [
+    1231128776,
+    1231136440
+  ],
+  "level_count": 51,
+  "cross_check_51": {
+    "missing_from_table": [],
+    "extra_in_table": [],
+    "matches_inventory": true
+  },
+  "safe_no_script_targets": [
+    "Catacombs",
+    "eleh",
+    "IkaemosBottomInt",
+    "IkaemosBottomInt2",
+    "IkaemosExt",
+    "IkaemosExt2",
+    "IkaemosTopInt",
+    "IonaExt",
+    "IonaExt02",
+    "jadetemple",
+    "KhosaniLab",
+    "KhosaniLab2",
+    "KhosaniStrng",
+    "lenele1aa",
+    "lenele1ab",
+    "lenele1b",
+    "lenele1c",
+    "lenele1d",
+    "lenele1e",
+    "lenele2aa",
+    "lenele2ab",
+    "lenele2d",
+    "lenele3a",
+    "lenele3d",
+    "Liangshan",
+    "LPalaceInt",
+    "LPalaceInt02",
+    "masad",
+    "Rand-Desert",
+    "Rand-DesertNite01",
+    "rand-forest01",
+    "rand-forestnite1",
+    "Rand-Grassland01",
+    "Rand-GrasslandNite01",
+    "rand-hills01",
+    "Rand-HillsNite01",
+    "Rand-Iceland01",
+    "Rand-IcelandNite01",
+    "Rand-Orenia01",
+    "Rand-OreniaNite01",
+    "sewer",
+    "sewerboss",
+    "tancredhouse",
+    "TempleInt",
+    "TempleInt2",
+    "test",
+    "Wolong",
+    "Wolong2",
+    "WolongCaverns",
+    "worldmap1"
+  ],
+  "unsafe_no_script_targets": [
+    "endgame"
+  ],
+  "levels": {
+    "Catacombs": {
+      "scripts": [
+        "catacombs"
+      ],
+      "base_script": "catacombs",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "eleh": {
+      "scripts": [
+        "eleh"
+      ],
+      "base_script": "eleh",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "endgame": {
+      "scripts": [],
+      "base_script": null,
+      "base_is_name": false,
+      "provides_name_script": false,
+      "safe_no_script_target": false
+    },
+    "IkaemosBottomInt": {
+      "scripts": [
+        "IkaemosBottomInt"
+      ],
+      "base_script": "IkaemosBottomInt",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "IkaemosBottomInt2": {
+      "scripts": [
+        "IkaemosBottomInt2"
+      ],
+      "base_script": "IkaemosBottomInt2",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "IkaemosExt": {
+      "scripts": [
+        "IkaemosExt"
+      ],
+      "base_script": "IkaemosExt",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "IkaemosExt2": {
+      "scripts": [
+        "IkaemosExt2"
+      ],
+      "base_script": "IkaemosExt2",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "IkaemosTopInt": {
+      "scripts": [
+        "IkaemosTopInt"
+      ],
+      "base_script": "IkaemosTopInt",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "IonaExt": {
+      "scripts": [
+        "IonaEXT"
+      ],
+      "base_script": "IonaEXT",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "IonaExt02": {
+      "scripts": [
+        "IonaExt02",
+        "IonaExt02_v2"
+      ],
+      "base_script": "IonaExt02",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "jadetemple": {
+      "scripts": [
+        "jadetemple",
+        "jadetemple_v2"
+      ],
+      "base_script": "jadetemple",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "KhosaniLab": {
+      "scripts": [
+        "khosanilab"
+      ],
+      "base_script": "khosanilab",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "KhosaniLab2": {
+      "scripts": [
+        "khosanilab2"
+      ],
+      "base_script": "khosanilab2",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "KhosaniStrng": {
+      "scripts": [
+        "KhosaniStrng",
+        "KhosaniStrng_v2",
+        "KhosaniStrng_v3",
+        "KhosaniStrng_v4",
+        "KhosaniStrng_v5",
+        "KhosaniStrng_v6"
+      ],
+      "base_script": "KhosaniStrng",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "lenele1aa": {
+      "scripts": [
+        "lenele1aa",
+        "lenele1aa_v2",
+        "lenele1aa_v3"
+      ],
+      "base_script": "lenele1aa",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "lenele1ab": {
+      "scripts": [
+        "lenele1ab",
+        "lenele1ab_v2",
+        "lenele1ab_v3"
+      ],
+      "base_script": "lenele1ab",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "lenele1b": {
+      "scripts": [
+        "lenele1b",
+        "lenele1b_v2",
+        "lenele1b_v3"
+      ],
+      "base_script": "lenele1b",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "lenele1c": {
+      "scripts": [
+        "lenele1c"
+      ],
+      "base_script": "lenele1c",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "lenele1d": {
+      "scripts": [
+        "lenele1d",
+        "lenele1d_v2",
+        "lenele1d_v3"
+      ],
+      "base_script": "lenele1d",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "lenele1e": {
+      "scripts": [
+        "lenele1e",
+        "lenele1e_v2"
+      ],
+      "base_script": "lenele1e",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "lenele2aa": {
+      "scripts": [
+        "lenele2aa"
+      ],
+      "base_script": "lenele2aa",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "lenele2ab": {
+      "scripts": [
+        "lenele2ab"
+      ],
+      "base_script": "lenele2ab",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "lenele2d": {
+      "scripts": [
+        "lenele2d"
+      ],
+      "base_script": "lenele2d",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "lenele3a": {
+      "scripts": [
+        "lenele3a"
+      ],
+      "base_script": "lenele3a",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "lenele3d": {
+      "scripts": [
+        "Lenele3d"
+      ],
+      "base_script": "Lenele3d",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "Liangshan": {
+      "scripts": [
+        "Liangshan"
+      ],
+      "base_script": "Liangshan",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "LPalaceInt": {
+      "scripts": [
+        "LPalaceInt",
+        "LPalaceInt_v2"
+      ],
+      "base_script": "LPalaceInt",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "LPalaceInt02": {
+      "scripts": [
+        "LPalaceInt02"
+      ],
+      "base_script": "LPalaceInt02",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "masad": {
+      "scripts": [
+        "masad",
+        "masad_v2"
+      ],
+      "base_script": "masad",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "Rand-Desert": {
+      "scripts": [
+        "Rand-Desert",
+        "Rand-Desert_v2",
+        "Rand-Desert_v3"
+      ],
+      "base_script": "Rand-Desert",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "Rand-DesertNite01": {
+      "scripts": [
+        "Rand-DesertNite01",
+        "Rand-DesertNite01_v2",
+        "Rand-DesertNite01_v3"
+      ],
+      "base_script": "Rand-DesertNite01",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "rand-forest01": {
+      "scripts": [
+        "Rand-Forest01",
+        "Rand-Forest01_v2",
+        "Rand-Forest01_v3",
+        "Rand-Forest01_v4",
+        "Rand-Forest01_v5",
+        "Rand-Forest01_v6"
+      ],
+      "base_script": "Rand-Forest01",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "rand-forestnite1": {
+      "scripts": [
+        "Rand-Forestnite1",
+        "Rand-Forestnite1_v2",
+        "Rand-Forestnite1_v3",
+        "Rand-Forestnite1_v4",
+        "Rand-Forestnite1_v5",
+        "Rand-Forestnite1_v6",
+        "Rand-Forestnite1_v7"
+      ],
+      "base_script": "Rand-Forestnite1",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "Rand-Grassland01": {
+      "scripts": [
+        "Rand-Grassland01",
+        "Rand-grassland01_v2",
+        "Rand-grassland01_v3",
+        "Rand-grassland01_v4",
+        "Rand-grassland01_v5"
+      ],
+      "base_script": "Rand-Grassland01",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "Rand-GrasslandNite01": {
+      "scripts": [
+        "Rand-GrasslandNite01",
+        "Rand-GrasslandNite012",
+        "Rand-GrasslandNite013"
+      ],
+      "base_script": "Rand-GrasslandNite01",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "rand-hills01": {
+      "scripts": [
+        "rand-hills01",
+        "rand-hills01_v2",
+        "rand-hills01_v3",
+        "rand-hills01_v4"
+      ],
+      "base_script": "rand-hills01",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "Rand-HillsNite01": {
+      "scripts": [
+        "Rand-HillsNite01",
+        "Rand-HillsNite01_v2",
+        "Rand-HillsNite01_v3"
+      ],
+      "base_script": "Rand-HillsNite01",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "Rand-Iceland01": {
+      "scripts": [
+        "Rand-Iceland01",
+        "Rand-Iceland01_v2",
+        "Rand-Iceland01_v3",
+        "Rand-Iceland01_v4"
+      ],
+      "base_script": "Rand-Iceland01",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "Rand-IcelandNite01": {
+      "scripts": [
+        "Rand-IcelandNite01",
+        "Rand-IcelandNite01_v2",
+        "Rand-IcelandNite01_v3"
+      ],
+      "base_script": "Rand-IcelandNite01",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "Rand-Orenia01": {
+      "scripts": [
+        "Rand-Orenia01",
+        "Rand-Orenia01_v2",
+        "Rand-Orenia01_v3"
+      ],
+      "base_script": "Rand-Orenia01",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "Rand-OreniaNite01": {
+      "scripts": [
+        "Rand-OreniaNite01",
+        "Rand-OreniaNite01_v2",
+        "Rand-OreniaNite01_v3"
+      ],
+      "base_script": "Rand-OreniaNite01",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "sewer": {
+      "scripts": [
+        "sewer",
+        "sewer_v2",
+        "sewer_v3"
+      ],
+      "base_script": "sewer",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "sewerboss": {
+      "scripts": [
+        "sewerboss"
+      ],
+      "base_script": "sewerboss",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "tancredhouse": {
+      "scripts": [
+        "tancredhouse",
+        "tancredhouse_v2",
+        "tancredhouse_v3"
+      ],
+      "base_script": "tancredhouse",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "TempleInt": {
+      "scripts": [
+        "TempleInt",
+        "TempleInt_v2"
+      ],
+      "base_script": "TempleInt",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "TempleInt2": {
+      "scripts": [
+        "TempleInt2"
+      ],
+      "base_script": "TempleInt2",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "test": {
+      "scripts": [
+        "test"
+      ],
+      "base_script": "test",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "Wolong": {
+      "scripts": [
+        "wolong"
+      ],
+      "base_script": "wolong",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "Wolong2": {
+      "scripts": [
+        "Wolong2",
+        "Wolong2_v2"
+      ],
+      "base_script": "Wolong2",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "WolongCaverns": {
+      "scripts": [
+        "WolongCaverns"
+      ],
+      "base_script": "WolongCaverns",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    },
+    "worldmap1": {
+      "scripts": [
+        "worldmap1"
+      ],
+      "base_script": "worldmap1",
+      "base_is_name": true,
+      "provides_name_script": true,
+      "safe_no_script_target": true
+    }
+  },
+  "door_cross_check": {
+    "total_doors": 218,
+    "with_script": 90,
+    "no_script": 128,
+    "no_script_safe": 128,
+    "no_script_unsafe": 0,
+    "no_script_unknown_dest": 0,
+    "unsafe_dest_counts": {},
+    "unknown_dest_counts": {}
+  }
+}

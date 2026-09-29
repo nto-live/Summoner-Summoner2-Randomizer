@@ -1984,6 +1984,157 @@ def t_weapon_attack_max(blob, rng, value=999):
     return bytes(out), rep
 
 
+_XP_GAINED_RE = re.compile(rb"(\$Experience Gained\s*:\s*)(\d+)")
+
+
+def t_enemy_xp_random(blob, rng, style="floor"):
+    """Randomize how much XP each mob gives on death.
+
+    `$Experience Gained` is the per-creature kill reward, one per hostile `#Character Info`
+    block (distinct from the global xp_scale/xp_boost multipliers and from scripted `+AddXP:`
+    quest rewards). We shuffle those values AMONG the hostiles, so a trash mob may be worth a
+    boss's XP and vice-versa. Size-preserving: a value only moves into a field of its own byte
+    width (style=floor), so nothing grows. style=pure lets values cross widths where they fit.
+    Hostiles only - the party's own blocks are never touched.
+    """
+    rep = Report("enemy_xp_random")
+    style = str(style)
+    if style not in STAT_STYLES:
+        rep.notes.append(f"unknown style {style!r} - pick one of {list(STAT_STYLES)}; "
+                         f"nothing changed")
+        return blob, rep
+    blocks = _hostile_char_blocks(blob)
+    if not blocks:
+        rep.notes.append("no hostile #Character Info blocks found - nothing changed")
+        return blob, rep
+
+    # collect every hostile $Experience Gained value with its absolute offset + width
+    entries = []  # (abs_off, width, value_bytes)
+    for s, e in blocks:
+        seg = bytes(blob[s:e])
+        for m in _XP_GAINED_RE.finditer(seg):
+            entries.append((s + m.start(2), len(m.group(2)), m.group(2)))
+    if len(entries) < 2:
+        rep.notes.append(f"only {len(entries)} $Experience Gained field(s) - nothing to shuffle")
+        return blob, rep
+
+    # group by width (floor) or allow cross-width where it fits (pure), then permute values
+    out = bytearray(blob)
+    hits = 0
+    if style == "floor":
+        from collections import defaultdict
+        by_w = defaultdict(list)
+        for off, w, val in entries:
+            by_w[w].append((off, val))
+        for w, items in by_w.items():
+            vals = [v for _o, v in items]
+            order = list(range(len(vals)))
+            rng.shuffle(order)
+            for (off, _old), j in zip(items, order):
+                new = vals[j]
+                if new != _old:
+                    out[off:off + w] = new
+                    hits += 1
+    else:  # pure: permute all values, right-justify into each destination width, clamp
+        vals = [int(v) for _o, _w, v in entries]
+        order = list(range(len(vals)))
+        rng.shuffle(order)
+        for (off, w, old), j in zip(entries, order):
+            new = _fit_int_to_width(vals[j], w)
+            if new != old:
+                out[off:off + w] = new
+                hits += 1
+
+    rep.changed += hits
+    rep.notes.insert(0, f"{len(entries)} hostile $Experience Gained fields, {hits} moved "
+                        f"(style={style})")
+    rep.notes.append("hostiles only; the party is untouched")
+    rep.notes.append("size-preserving; each value stays inside a field of its own width")
+    return bytes(out), rep
+
+
+_DROP_WEIGHT_RE = re.compile(rb'(\+Drop:\s*"[^"]+"\s*)(\d+)')
+
+
+def t_enemy_drops_always(blob, rng):
+    """Force every existing enemy drop to be guaranteed.
+
+    A `+Drop: "Item" <weight>` entry's number is the drop CHANCE (2..100 in the shipped data;
+    100 = always). This maxes every weight to the largest value its field width holds - so a
+    3-wide field becomes 100 (guaranteed), a 2-wide 99, a 1-wide 9. Any enemy that CAN drop an
+    item now (almost) always does. Size-preserving; rng unused (deterministic).
+
+    HONEST LIMIT: this can only boost drops that already exist. An enemy with NO `+Drop` entry
+    cannot be given one without adding bytes (which would break size-preservation), so a truly
+    drop-less enemy stays drop-less. In the shipped data the +Drop entries are attached to
+    creatures' attack/death records, not the bare stat block, so coverage is broad but not
+    provably every single hostile.
+    """
+    rep = Report("enemy_drops_always")
+    out = bytearray(blob)
+    hits = 0
+    for m in list(_DROP_WEIGHT_RE.finditer(bytes(out))):
+        width = len(m.group(2))
+        # the field's max that still fits: min(100, all-nines-of-width). 100 needs 3 digits.
+        cap = 100 if width >= 3 else int("9" * width)
+        new = _fit_int_to_width(cap, width)
+        if new != m.group(2):
+            a = m.start(2)
+            out[a:a + width] = new
+            hits += 1
+    if hits == 0:
+        rep.notes.append("no +Drop weights found (or already maxed) - nothing changed")
+        return bytes(out), rep
+    rep.changed += hits
+    total = len(_DROP_WEIGHT_RE.findall(bytes(blob)))
+    rep.notes.insert(0, f"{total} +Drop weights, {hits} raised to their field max (100 where it fits)")
+    rep.notes.append("boosts EXISTING drops to guaranteed; cannot add a drop to a drop-less enemy "
+                     "(that needs extra bytes and would break size-preservation)")
+    rep.notes.append("size-preserving; each weight written inside its own field width")
+    return bytes(out), rep
+
+
+def t_enemy_xp_set(blob, rng, value=999):
+    """Set EVERY hostile creature's $Experience Gained to one chosen value - fast leveling.
+
+    The kill reward for every hostile becomes `value`, right-justified into each field's own byte
+    width and clamped to that width's all-nines maximum (so a 4-digit reward field can hold 9999,
+    a 3-digit one 999, etc. - the disc never changes size). Set it high to level fast. Distinct
+    from enemy_xp_random (which shuffles) and from the global xp_scale/xp_boost multipliers.
+    rng is unused: the value is deterministic.
+    """
+    rep = Report("enemy_xp_set")
+    try:
+        v = max(0, int(value))
+    except (TypeError, ValueError):
+        rep.notes.append(f"unusable value {value!r} - refused, nothing changed")
+        return blob, rep
+    blocks = _hostile_char_blocks(blob)
+    if not blocks:
+        rep.notes.append("no hostile #Character Info blocks found - nothing changed")
+        return blob, rep
+    out = bytearray(blob)
+    hits = 0
+    for s, e in blocks:
+        seg = bytes(out[s:e])
+        for m in _XP_GAINED_RE.finditer(seg):
+            width = len(m.group(2))
+            new = _fit_int_to_width(v, width)
+            if new != m.group(2):
+                a = s + m.start(2)
+                out[a:a + width] = new
+                hits += 1
+    if hits == 0:
+        rep.notes.append("no $Experience Gained fields found (or already at value) - nothing changed")
+        return bytes(out), rep
+    rep.changed += hits
+    rep.notes.insert(0, f"{len(blocks)} hostile creature definitions, "
+                        f"$Experience Gained set to {v} ({hits} fields)")
+    rep.notes.append("XP-on-kill only; other stats untouched. Set high to level fast.")
+    rep.notes.append("size-preserving; each value written inside its own field width (all-9s clamp)")
+    return bytes(out), rep
+
+
 def t_armor_protect_max(blob, rng, value=999):
     """Buff armour: set every armour item's $Protection (and numeric $Armor:) high.
 
@@ -2074,6 +2225,14 @@ DOOR_TARGET_NAMES = (
 DOOR_TARGET_EXCLUDE = frozenset({"test", "endgame"})
 DOOR_SENTINEL = "$zzz"      # reserved by the enemy disarm (`enemies_none`); never emitted
 
+# Doors whose SOURCE level is the opening area or the overworld hub are left alone. Their loads
+# passed every static check (real Level_info name, len<=old, +Index slot present, +Script safe)
+# yet still bounced to the main menu in game ("Exit to Unknown?" -> title). The overworld/masad
+# use a load path we cannot fully validate from the tables, and these are the very first
+# transitions every run hits, so a bad remap is game-breaking. Held until the crossing is
+# understood (see DOOR-REMAP.md / PLANNED.md). Matched by _door_key against the door's source.
+DOOR_SOURCE_EXCLUDE = frozenset({"masad", "worldmap", "worldmap1"})
+
 DOOR_HOW_VALUES = ("shuffle", "swap", "off")
 
 
@@ -2101,6 +2260,50 @@ def _door_same_level(src_display: str | None, candidate: str) -> bool:
     if a == b:
         return True
     return min(len(a), len(b)) >= 8 and (a.startswith(b) or b.startswith(a))
+
+
+# A door with no explicit +Script: uses its DESTINATION NAME as the script name; the engine then
+# looks that name up in the destination level's own script list and bounces to the menu ("Exit to
+# Unknown") if it is absent. So a no-script door may only target a level that provides a script
+# equal to its own name. That mapping is the authoritative script_filenames.tbl, a member of
+# TABLES.VPP: one contiguous run of `$Level:`/`+Script:` records between the shipped
+# "CHANGING THE ORDER" banner and the next `#End`. We parse it straight from the blob so the rule
+# always matches the disc in hand (see docs/lab/DOOR-SCRIPT-RULE.md; verified: 51 levels, and every
+# level except `endgame` provides its own-named script, so `endgame` is the only unsafe target -
+# and it is already excluded as the ending).
+_SCRIPT_TABLE_BANNER = b"CHANGING THE ORDER"
+_SCRIPT_LEVEL_RE = re.compile(rb'\$Level:\s*"([^"\r\n]{1,40})"')
+_SCRIPT_ENTRY_RE = re.compile(rb'\+Script:\s*"([^"\r\n]{1,40})"')
+
+
+def _no_script_safe_targets(blob: bytes) -> set[str]:
+    """Set of level keys (via _door_key) that a NO-+Script: door may safely target.
+
+    A level qualifies iff it declares a `+Script:` whose name equals the level name
+    (case-insensitively) - i.e. the name-as-script default resolves. Parsed from
+    script_filenames.tbl inside the blob. Conservative: if the table cannot be located, returns
+    an empty set, which makes the caller hold every no-script door (refuse rather than guess).
+    """
+    b = blob.find(_SCRIPT_TABLE_BANNER)
+    if b < 0:
+        return set()
+    first = _SCRIPT_LEVEL_RE.search(blob, b)
+    if not first:
+        return set()
+    end = blob.find(b"#End", first.start())
+    if end < 0:
+        end = min(first.start() + 0x4000, len(blob))
+    body = blob[first.start():end]
+    lvls = list(_SCRIPT_LEVEL_RE.finditer(body))
+    safe: set[str] = set()
+    for i, m in enumerate(lvls):
+        name = m.group(1).decode("latin-1")
+        seg_end = lvls[i + 1].start() if i + 1 < len(lvls) else len(body)
+        seg = body[m.end():seg_end]
+        scripts = [s.group(1).decode("latin-1") for s in _SCRIPT_ENTRY_RE.finditer(seg)]
+        if any(_door_key(s) == _door_key(name) for s in scripts):
+            safe.add(_door_key(name))
+    return safe
 
 
 def _door_records(blob: bytes) -> list[dict]:
@@ -2131,9 +2334,14 @@ def _door_records(blob: bytes) -> list[dict]:
         # the arrival start-id: `+Index: N`. The destination MUST provide a player-start
         # navpoint for this slot or the load fails and the game bounces to the menu (the
         # "exit to the unknown" symptom). Captured so candidate selection can honour it.
-        idxm = re.search(rb"\+Index:\s*(\d+)", blob[m.end():end])
+        seg = blob[m.end():end]
+        idxm = re.search(rb"\+Index:\s*(\d+)", seg)
         index = int(idxm.group(1)) if idxm else None
-        recs.append({"off": m.start(1), "name": m.group(1), "src": src, "index": index})
+        # does this door declare an explicit +Script:? If not, its script name defaults to the
+        # destination name, which is the "Exit to Unknown" trap when remapped (see the transform).
+        has_script = re.search(rb'\+Script:\s*"', seg) is not None
+        recs.append({"off": m.start(1), "name": m.group(1), "src": src,
+                     "index": index, "has_script": has_script})
     return recs
 
 
@@ -2172,13 +2380,20 @@ def _level_start_slots(blob: bytes) -> dict[str, set[int]]:
 
 def _door_candidates(old_len: int, src_display: str | None,
                      index: int | None = None,
-                     slots_by_level: dict[str, set[int]] | None = None) -> list[str]:
+                     slots_by_level: dict[str, set[int]] | None = None,
+                     has_script: bool = True,
+                     safe_targets: set[str] | None = None) -> list[str]:
     """Every legal target for one door. Empty means the door is left alone, not guessed at.
 
-    When `index` and `slots_by_level` are supplied, a target is also required to PROVIDE that
-    start-id slot - so a remapped door always lands somewhere the player can actually spawn,
-    instead of bouncing to the menu. A target whose slot set we could not determine is
-    excluded (refuse rather than guess).
+    Constraints, all enforced (never guessed):
+      * `len(new) <= len(old)` - fixed-width field;
+      * a real `Level_info` name, never the dev/ending exclusions or the `$zzz` sentinel;
+      * never the door's own source level;
+      * if `index`/`slots_by_level` given: the target must PROVIDE that start-id slot, so the
+        player can actually spawn (else the load bounces to the menu);
+      * if the door has NO explicit `+Script:` (`has_script` False) and `safe_targets` is given:
+        the target must be in `safe_targets` - a level that provides a script equal to its own
+        name - or the name-as-script default fails to resolve ("Exit to Unknown").
     """
     out = []
     for name in DOOR_TARGET_NAMES:
@@ -2194,6 +2409,9 @@ def _door_candidates(old_len: int, src_display: str | None,
             provided = slots_by_level.get(_door_key(name))
             if not provided or index not in provided:
                 continue                            # can't spawn the player here at this slot
+        if not has_script and safe_targets is not None:
+            if _door_key(name) not in safe_targets:
+                continue                            # name-as-script would not resolve
         out.append(name)
     return out
 
@@ -2216,8 +2434,16 @@ def _diff_outside(a: bytes, b: bytes, fields: list[tuple[int, int]]) -> int:
     return n
 
 
-def t_door_destination_remap(blob, rng, how="shuffle"):
+def t_door_destination_remap(blob, rng, how="shuffle", require_script=False):
     """Rewrite where every door leads. The headline feature.
+
+    All 218 doors are eligible. The "Exit to Unknown" trap - a door with no explicit `+Script:`
+    using its destination NAME as the script name (door-mechanism.md 5b caveat 2) - is now
+    handled precisely: such doors are constrained to the `+Script:` safe-target set (levels that
+    provide a script equal to their own name), parsed from script_filenames.tbl in the blob. That
+    set is every level but `endgame` (see docs/lab/DOOR-SCRIPT-RULE.md), and `endgame` is already
+    excluded, so no-script doors keep essentially the full pool while never bouncing to the menu.
+    `require_script=True` is a stricter opt-in that remaps only explicit-+Script doors.
 
     Each door's destination name is replaced by another real level name that fits its field,
     so the byte count in and out is identical and the stream never shifts. Everything is
@@ -2254,7 +2480,43 @@ def t_door_destination_remap(blob, rng, how="shuffle"):
     if not recs:
         rep.notes.append("no `+Id: \"load level\"` doors found in this stream - nothing changed")
         return blob, rep
-    rep.notes.append(f"{len(recs)} door(s) found by parsing the stream")
+
+    # Hold the opening-area / overworld-hub doors: their loads pass every static check but still
+    # bounce to the title in game, and they are the first transitions a run hits.
+    src_held = 0
+    kept = []
+    for r in recs:
+        srck = _door_key(r.get("src") or "")
+        if any(srck == _door_key(x) or srck.startswith(_door_key(x)) for x in DOOR_SOURCE_EXCLUDE):
+            src_held += 1
+        else:
+            kept.append(r)
+    recs = kept
+    rep.notes.append(f"{len(recs)} door(s) eligible ({src_held} held: opening-area/overworld "
+                     f"sources are not remapped - they bounce to the title even when valid)")
+    if not recs:
+        rep.notes.append("all doors were in held source levels - nothing changed")
+        return blob, rep
+
+    # The +Script: safe-target set (levels a no-script door may point at without the
+    # "Exit to Unknown" bounce). Parsed from script_filenames.tbl in the blob. `require_script`
+    # is kept as a stricter opt-in: if a caller sets it True we ONLY remap doors that carry an
+    # explicit +Script: (belt-and-braces); by default we remap every door but constrain the
+    # no-script ones to the safe set - which the sub-agent proved is every level but `endgame`.
+    safe_targets = _no_script_safe_targets(blob)
+    if not safe_targets:
+        rep.notes.append("WARNING: could not parse script_filenames.tbl - holding all no-script "
+                         "doors (they would risk 'Exit to Unknown')")
+    else:
+        rep.notes.append(f"+Script safe-target set: {len(safe_targets)} levels")
+    if require_script:
+        held = sum(1 for r in recs if not r.get("has_script"))
+        recs = [r for r in recs if r.get("has_script")]
+        rep.notes.append(f"require_script=True: remapping only the {len(recs)} explicit-+Script "
+                         f"doors, holding {held} no-script doors")
+        if not recs:
+            rep.notes.append("no doors with an explicit +Script: - nothing changed")
+            return blob, rep
 
     # sanity check on the level list itself: every destination already in the stream has to be
     # a name this build knows, or the list is wrong for this disc and nothing should be written
@@ -2296,11 +2558,13 @@ def t_door_destination_remap(blob, rng, how="shuffle"):
         rec = recs[idx]
         old = rec["name"]
         door_index = rec.get("index")
+        door_has_script = rec.get("has_script", True)
         if how == "shuffle":
-            cands = _door_candidates(len(old), rec["src"], door_index, slots_by_level)
+            cands = _door_candidates(len(old), rec["src"], door_index, slots_by_level,
+                                     door_has_script, safe_targets)
             if not cands:
                 _skip(f"no legal target of length <= {len(old)} that provides start-id "
-                      f"{door_index}")
+                      f"{door_index}" + ("" if door_has_script else " and is +Script-safe"))
                 continue
             new = cands[rng.randrange(len(cands))].encode("latin-1")
         else:
@@ -2321,10 +2585,14 @@ def t_door_destination_remap(blob, rng, how="shuffle"):
                     provided = slots_by_level.get(_door_key(cand_name))
                     if not provided or door_index not in provided:
                         continue
+                # a no-script door must land on a +Script-safe level (name-as-script resolves)
+                if not door_has_script and safe_targets is not None:
+                    if _door_key(cand_name) not in safe_targets:
+                        continue
                 pick = j
                 break
             if pick is None:
-                _skip("no remaining destination fits this field and start-id")
+                _skip("no remaining destination fits this field, start-id and +Script rule")
                 continue
             new = pool[pick]                      # type: ignore[assignment]
             pool[pick] = None
@@ -2403,7 +2671,8 @@ OPTION_AWARE = {"ring_hunt", "xp_scale", "levelcap_set", "permadeath", "enemy_di
                 "player_stats_random", "enemy_stats_random", "enemy_hp_set",
                 "enemies_none", "enemies_swarm", "enemies_random", "enemies_amount",
                 "door_destination_remap", "chest_items",
-                "weapon_attack_max", "armor_protect_max"}
+                "weapon_attack_max", "armor_protect_max", "enemy_xp_random",
+                "enemy_xp_set"}
 
 OPTIONS = {
     "chest_items": {
@@ -2529,6 +2798,22 @@ OPTIONS = {
                     "999 = as tanky as each field allows.",
         },
     },
+    "enemy_xp_random": {
+        "style": {
+            "type": "choice", "default": "floor", "choices": ["floor", "pure"],
+            "label": "Shuffle style",
+            "help": "floor = XP values stay in their own width class (a big reward stays big-ish) "
+                    "\u00b7 pure = values cross widths where they fit, so any mob can pay any amount.",
+        },
+    },
+    "enemy_xp_set": {
+        "value": {
+            "type": "int", "default": 9999, "min": 0, "max": 999999,
+            "label": "XP per kill",
+            "help": "Every enemy gives this much XP on death, clamped per field to the largest "
+                    "number that fits (so a 4-wide field caps at 9999). Set high to level fast.",
+        },
+    },
     "enemies_none": {
         "how": {
             "type": "choice", "default": "navpoint",
@@ -2560,6 +2845,13 @@ OPTIONS = {
                     "doors that can hold them, so no destination is invented and none "
                     "disappears; off = change nothing. A door with nowhere legal to go is left "
                     "alone and reported, never guessed at.",
+        },
+        "require_script": {
+            "type": "bool", "default": False,
+            "label": "Explicit-script doors only",
+            "help": "Off (default): remap ALL doors; no-script doors are constrained to levels "
+                    "whose script matches their name, so none can bounce to 'Exit to Unknown'. "
+                    "On: stricter - only remap doors that carry an explicit +Script:.",
         },
     },
 }
@@ -2778,6 +3070,24 @@ TRANSFORM_INFO = {
         "wrong track plays in the wrong place - but sound effects are left alone. Use "
         "music_shuffle instead if you want SFX scrambled too. Size-preserving.",
     ),
+    "enemy_xp_random": (
+        "Random XP per kill",
+        "Shuffles $Experience Gained among hostile creatures, so how much XP a mob is worth on "
+        "death is scrambled - a trash mob may pay a boss's XP and vice-versa. Separate from the "
+        "global XP multipliers and from scripted quest XP. Hostiles only. Size-preserving.",
+    ),
+    "enemy_xp_set": (
+        "Set XP per kill (fast leveling)",
+        "Sets every hostile creature's $Experience Gained to one value you choose, clamped per "
+        "field to the largest number that fits its width. Set it high to level up fast. Separate "
+        "from the global XP multipliers. Hostiles only. Size-preserving.",
+    ),
+    "enemy_drops_always": (
+        "Guaranteed enemy drops",
+        "Maxes every enemy +Drop chance (to 100 where the field allows), so any enemy that can "
+        "drop an item almost always does. Cannot add a drop to an enemy that has none (that needs "
+        "extra bytes). Size-preserving.",
+    ),
     "creature_stats_shuffle": (
         "Creature stats",
         "Shuffles the creature stat block — speed, weight, hit points, damage, "
@@ -2856,6 +3166,9 @@ TRANSFORMS = {
     "enemy_hp_set": t_enemy_hp_set,
     "weapon_attack_max": t_weapon_attack_max,
     "armor_protect_max": t_armor_protect_max,
+    "enemy_xp_random": t_enemy_xp_random,
+    "enemy_xp_set": t_enemy_xp_set,
+    "enemy_drops_always": t_enemy_drops_always,
     "shops_free": t_shops_free,
     "shops_crazy": t_shops_crazy,
     "shops_none": t_shops_none,

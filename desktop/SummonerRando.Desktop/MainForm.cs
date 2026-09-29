@@ -30,7 +30,7 @@ public sealed class MainForm : Form
         "enemy_hp_set",
         // gear + loot + transitions - these change how the game PLAYS, not how it looks
         "weapon_attack_max", "armor_protect_max", "enemy_drops_random",
-        "door_destination_remap",
+        "door_destination_remap", "enemy_xp_random", "enemy_xp_set", "enemy_drops_always",
     };
 
     private readonly EngineClient? _engine;

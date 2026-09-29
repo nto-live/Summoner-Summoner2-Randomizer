@@ -198,6 +198,30 @@ with no legal target is left alone and counted as a skip. The two softer ones ad
 research (`+Index:` navpoint existence in the destination, and the `+Script:` rule) are **not**
 enforced; that is the honest gap, and it is exactly what the parent's in-game A/B has to answer.
 
+**2026-09-28 — both soft constraints confirmed as REAL bugs in game, and one half-fixed:**
+Joshua walked the first `masad` transition and got the **"Exit to Unknown?"** prompt (boat exit,
+screenshot on file) — the door fired but the destination resolved to nothing.
+* **`+Index:` slot (half-fixed).** Added `_level_start_slots()` + a slot check in
+  `_door_candidates` / the swap path: a door is now only sent to a level that actually declares a
+  `$player*-<slot>` navpoint for the door's `+Index`. Reduced remaps 209→171 (the difference are
+  doors whose index no destination could satisfy — now skipped honestly, not bounced). **Caveat:**
+  the level→slots map only resolved **21 of 51** levels (conservative text segmentation), so it is
+  incomplete, not authoritative.
+* **`+Script:` rule (STILL A BUG — the actual "Exit to Unknown" cause).** 128 of 218 doors carry
+  **no `+Script:`**, so the engine uses the destination *name* as the script name
+  (`door-mechanism.md` §5b caveat 2). If the target level's base script name ≠ its level name, the
+  script resolves to −1 → "Unknown" → bounce to menu. This is **not enforced**, and a text-scan
+  heuristic for "level whose script == its name" is too loose to trust (would violate declare-and-
+  refuse). Needs the real `Level_script_info` / `script_filenames.tbl` mapping (authoritative copy
+  is on the N100 in `F:\rando\S1\notes\`, or pull it from the ELF in Ghidra).
+
+**Durable artifact created this session:** `docs/lab/transitions.json` — all 218 doors with ISO
+offset, source, dest, `+Index`, `+Type`, `has_script`, script, plus each level's known start slots.
+Regenerate with `docs/lab/export_transitions.py`. This is the map future door work should read.
+
+**Status: door_destination_remap is EXPERIMENTAL / not reliable** until the `+Script:` constraint
+is enforced. A seed can still land you on "Exit to Unknown". Do not present it as done.
+
 **`inventory.py` cannot see this.** Its fixture `F:\rando\S1\notes\_end_blob.bin` was built with
 the pre-fix offset rule and contains 1 of the 218 doors, so it reports `1 edit / 10 bytes`.
 Regenerating that fixture is a lab decision, not taken here; the disc numbers above are the ones
@@ -426,6 +450,7 @@ self-contained and offline)
 | Any edit that grows the archive | the archive-slack question (≈619 KB unused; needs a boot test) |
 | Summoner 2 (any of it) | the VPP v2 reader does not exist |
 | **Skip the startup movie** (`skip_intro`) | **present-but-pending — no longer blocked on the address.** The movie-start call site is now **resolved** in `binary.py` (`va=0x002419C0` → `jr $ra`, delay-slot `li v0,1` at `+0x4`, covering the THQ logo, attract demo and Volition logo). The patch deliberately keeps a `blocked` reason so it writes nothing and reports why; it is exposed as an independent UI toggle and via `--binary skip_intro`. The remaining step is **accepting it for release** (delete the `blocked=` line, then boot-/play-verify) — out of scope for the NTO Live feature (Non-Goal). See **`RESEARCH-SKIP-INTRO.md`**. Host-side (N100) verification — the disc and Ghidra project are there, not in the repo |
+| **Disable the opening tutorial** (masad tutorial popups) | **Mechanism resolved in Ghidra 2026-09-28; not yet patched.** The `masad_*_tutorial` names are `+Flag:` declarations in the `masad` level table (`masad_basic_controls_tutorial`, `_dialogue_tutorial_part1/2a/2b/3`, `_basic_combat_tutorial_part1/2`, `_spells_tutorial`, `_skills_tutorial`, `_chain_attack_tutorial`, `_level_up_tutorial_part1/2`). The **logic** is in the ELF, not the text layer, so it is NOT a table edit. Each tutorial step is gated by a function like `FUN_0023c8f0` that calls **`flag_is_set` @ `0x001f10a8`** (returns nonzero if the flag is already set → the step is SKIPPED via `bne v0,zero`), and only if unset does it fire the popup then call **`flag_set` @ `0x001f11e8`** (`a3=1`). So the flag pattern is *fire-once*: a set flag means "already shown". There is also an **`Ignore tutorial` debug command** (string @ `0x0127dec0`, table entry @ `0x0023da14`) whose handler toggles a global. **Safe disable options (unbuilt):** (a) NOP the tutorial-fire in each of the ~13 gates (many sites, each needs read-back); (b) find and force-on the `Ignore tutorial` global at boot (one site, cleaner — needs its address); (c) pre-set the masad tutorial flags at level init. **Do NOT** patch the shared `flag_is_set`/`flag_set` — every quest/event flag routes through them, so that would break progression. Not attempted because it is a multi-site or global-hunt binary patch that must be play-verified, and rushing it risks a boot hang (as neutering the intro `$Cutscene` token did). Host-side (N100/Ghidra) work |
 
 ---
 
