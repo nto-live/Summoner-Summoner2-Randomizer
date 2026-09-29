@@ -24,6 +24,9 @@ For each row:
   6. **every transform the mode lists appears in the report** - this is the check that
      catches a mode whose blurb promises ten levers and whose argv delivers three
   7. the output still identifies as a supported Summoner disc
+  8. **every binary patch the mode names reports `applied` with every declared word read
+     back and matching** - a mode whose only lever is an executable patch reports
+     `edits: 0` from the text layer, so without this it would pass while proving nothing
 
 By default the built .iso is deleted after each row, so only the small JSON reports
 travel: a full run would otherwise write ~1.2 GB x 39. That also makes this the right
@@ -222,6 +225,24 @@ def main() -> int:
             checks["still_identifies"] = bool(idp and idp.get("supported"))
             if exists and not checks["still_identifies"]:
                 detail.append("output no longer identifies as supported")
+
+            # 8: every binary patch the mode names must report applied, with every
+            # declared word read back and matching. Modes whose only lever is a binary
+            # patch (endgame_gate, skip_intro) report `edits: 0` from the TEXT layer, so
+            # without this check the matrix would pass them while proving nothing at all
+            # about the thing they actually do.
+            if binp:
+                bin_got = {b.get("patch"): b for b in (rep or {}).get("binary", [])}
+                bad: list[str] = []
+                for name, _params in ((b[0], b[1] if len(b) > 1 else {}) for b in binp):
+                    entry = bin_got.get(name)
+                    if not entry or not entry.get("applied"):
+                        bad.append(name + " (not applied)")
+                    elif any(not w.get("ok") for w in entry.get("words", [])):
+                        bad.append(name + " (word read-back failed)")
+                checks["binary_applied"] = not bad
+                if bad:
+                    detail.append("binary patch unverified: " + ", ".join(bad))
 
             ok = all(checks.values())
             rows.append({"mode": mode, "variant": label, "seed": seed,

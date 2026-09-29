@@ -82,6 +82,11 @@ Acceptance, per row:
    build did not corrupt the container
 6. **every mode that lists transforms reports an edit for each one** — this is the check that
    catches a mode whose blurb promises ten levers and whose argv delivers three
+7. **every binary patch the mode names reports `applied` with all declared words read back
+   and matching.** Modes whose only lever is an executable patch (`endgame_gate`,
+   `skip_intro`) report `edits: 0` from the text layer — without this they would pass the
+   matrix while proving nothing at all about the thing they actually do.
+8. **every transform the mode lists appears in the report** by name
 
 This suite is the difference between "the engine works" and **"a user describing what they want in
 the UI gets a working disc."**
