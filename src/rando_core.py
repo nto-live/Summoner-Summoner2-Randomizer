@@ -3358,6 +3358,20 @@ MODES = {
         "transforms": [],
         "risk": "none",
     },
+    # "Vanilla minus X" - the retail game with exactly ONE lever moved. The point is
+    # isolation: a disc that differs from retail by a single change is the only honest
+    # way to play-test that change, because nothing else can be blamed for what you see.
+    # It is also how the 2026-09-29 tutorial retraction should have been tested.
+    "vanilla_no_tutorial": {
+        "label": "Vanilla \u00b7 No Tutorials",
+        "blurb": "Nothing randomised at all - the retail game, with only the opening tutorials "
+                 "turned off. The one-lever baseline: a clean comparison disc, and the honest "
+                 "way to play-test the tutorial patch on its own, with no randomisation "
+                 "confounded into the result.",
+        "transforms": [],
+        "binary": [["skip_tutorial", {}]],
+        "risk": "low - no randomisation; the only change is the tutorial patch",
+    },
     "doors": {
         "label": "Door Shuffle",
         "blurb": "Door locks, names and sounds shuffled. Engine-referenced doors (the "

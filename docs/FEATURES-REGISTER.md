@@ -8,7 +8,7 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 
 | | count |
 |---|---|
-| Modes | 39 |
+| Modes | 40 |
 | Transforms | 54 |
 | Option-bearing transforms | 19 |
 | Binary (executable) patches | 4 |
@@ -26,6 +26,13 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 - **Tier:** `play-verified`
 - **Risk:** none
 - No changes. Baseline for comparing against.
+
+### `vanilla_no_tutorial` — Vanilla · No Tutorials
+
+- **Tier:** `boot-verified`
+- **Risk:** low - no randomisation; the only change is the tutorial patch
+- **Binary patches:** `skip_tutorial`
+- Nothing randomised at all - the retail game, with only the opening tutorials turned off. The one-lever baseline: a clean comparison disc, and the honest way to play-test the tutorial patch on its own, with no randomisation confounded into the result.
 
 ### `doors` — Door Shuffle
 
@@ -298,9 +305,9 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 ### `skip_intro` — Skip Intro Movie (binary)
 
 - **Tier:** `play-verified`
-- **Risk:** blocked — call site into mplayer.o not yet resolved; see docs/COMPILED-CODE.md
+- **Risk:** low - presentation only; play-verified (boot logos gone)
 - **Binary patches:** `skip_intro`
-- Stops the boot/intro video from playing. The intro is not in the script layer (zero .pss refs), so this patches the executable. BLOCKED until the movie-start call site is located in the Ghidra R5900 project — the engine lists it and refuses cleanly rather than guessing an address.
+- Stops the boot/intro video from playing: it makes the movie-player routine return immediately, which neutralises every boot-movie call at once. The intro is not in the script layer (zero .pss refs), so this is an executable patch. Play-verified - the THQ logo is gone. NOTE: this removes the .pss FMV logos; the in-engine story cinematic is a separate $Cutscene and is NOT removed by this patch (neutering it hangs the boot).
 
 ## 2. Transforms
 

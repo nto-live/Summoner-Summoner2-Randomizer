@@ -129,10 +129,15 @@ Never run every mode here — it is minutes each and the matrix in C is the chea
 The point of A–E is to shrink this list, not to pad it. Every row here must be:
 **one specific thing, on one named disc, with a yes/no answer.**
 
+The `vanilla_no_tutorial` mode exists for exactly this: it is **retail plus one lever**, so a
+T4 claim about the tutorial patch has nothing else to blame. The 2026-09-29 retraction happened
+because the claim was watched on a *stacked* disc and a control with no patch behaved the same
+way — that is what "isolate the claim" prevents.
+
 | # | disc | watch for | tier it upgrades |
 |---|---|---|---|
 | F1 | `Summoner-CHAOS.iso` | the boat transition reaches the **overworld**; an interior door loads a wrong-but-valid level | `door_remap` → T4 |
-| F2 | `Summoner-TUTONLY.iso` (seed TUT1) | no popups, player moves, **fire drops** | `skip_tutorial` → T4 (re-earned) |
+| F2 | `vanilla_no_tutorial` — build it fresh (retail + **only** the tutorial patch, zero randomisation) | no popups, player moves, **fire drops** | `skip_tutorial` → T4 (re-earned) |
 | F3 | 1-HP + max-gear + fast-XP disc | one-hit kills; drops land; gear reads high | `enemy_hp_set`, `weapon_attack_max`, `armor_protect_max`, `enemy_xp_set` → T4 |
 | F4 | any `doors` disc | opening does **not** soft-lock (the `invis-door0N` pin holds) | the door pin → T4 |
 
