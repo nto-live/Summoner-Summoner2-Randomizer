@@ -111,7 +111,7 @@ end up empty. Shipped as transform `chest_items` (option `how`) and folded into 
 The claim "a crate that held a tonic now holds something precious" is measured at the byte level
 and in the document stream, not observed in the running game. See `PLANNED.md` 2.16.
 
-### 1.4 `player_stats_random`, `enemy_stats_random` — the two stat items (+ `enemy_hp_set` split out — **DONE**)
+### 1.4 `player_stats_random`, `enemy_stats_random` — the two stat items (+ `enemy_hp_set` split out) — **DONE**
 **Requested as:** "Randomized enemy hp and stats", "Randomized player stats".
 **Mechanism:** shuffle the numeric fields inside `#Character Info` blocks — hostile blocks for the
 enemy side, `$Team: "friendly"` blocks for the playable party — between equal widths only.
@@ -129,9 +129,12 @@ never touched. It is **independent of `enemy_stats_random`** and reuses `HP_FIEL
 definitions, 160 HP fields rewritten, image byte-identical (size-preserving).** Registered in all
 four registries and exposed as a NumericUpDown in the desktop UI. **Built, unverified** in game.
 The remaining shuffle transforms — `enemy_stats_random` (the rest of the hostile numbers) and
-`player_stats_random` — are still to build.
+`player_stats_random` — **are now built** (2026-09-30): each is registered as a transform with a
+`style` option (`floor`/`pure`), each is option-aware, and both are wired into modes (`enemy_stats`,
+`player_stats`, `stat_chaos`). See `FEATURES.md` §2 for the measured numbers. Still **unverified in
+game** — see `PLANNED.md` 2.9.
 
-### 1.5 `rooms_shuffle` — randomised rooms, safe half
+### 1.5 `rooms_shuffle` — randomised rooms, safe half — **DONE**
 **Requested as:** "Randomized rooms".
 **Mechanism:** permute what populates *within* a level: shuffle `$Start position` anchors between
 placements of the same kind in the same level. Doors, quests, navpoints and the level graph never
@@ -140,6 +143,16 @@ design fork in `RESEARCH-ENTRANCE-LOGIC.md` §2.
 **Not in scope here:** swapping a level's whole interior with another level's (designed, riskier).
 **Acceptance:** anchors permute within a level and never across levels; every destination anchor
 still exists.
+
+**Built 2026-09-30 — measured on the retail disc at seed `ROOMS1`, size-preserving.** A level is
+detected from the stream itself: one `#Navpoints` section (header to the next `#End`/`#Navpoints`)
+per level script entry. Measured: **4,257 placements across 108 level sections**, and every one of
+their 4,257 anchors is defined inside its own section; **188 groups** (section, anchor namespace,
+width), **4,080 edits / 7,790 bytes**, 43 lone placements held (no same-kind, same-width partner).
+`$player*` (level start slots) and `$zzz*` (the `enemies_none` sentinel) are pinned and never move.
+Ships as transform `rooms_shuffle` (option `how`: `shuffle`/`swap`) and mode `rooms`
+(**Random Rooms**), surfaced in the desktop UI through the `--list` catalogue. **Unverified in
+game** — it needs a boot/play check like every other transform.
 
 ### 1.6 NTO Live — independent UI options, `--binary` flag, `NTO_LIVE_` seed — **DONE**
 **Requested as:** four individually-modifiable randomizer options wired into the desktop app, plus a

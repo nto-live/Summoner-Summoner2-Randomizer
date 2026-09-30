@@ -41,37 +41,34 @@ it is all written down, and re-deriving it has already cost days.
 
 **Two things, in this order.**
 
-**1. `player_stats_random` / `enemy_stats_random`** (`PLANNED.md` §1.4) — shuffle the numeric
-fields inside `#Character Info` blocks: hostile blocks for the enemy side, `$Team: "friendly"`
-blocks for the party. Equal widths only. `enemy_difficulty` already *scales* hostile numbers;
-this *shuffles* them. Recon is done (`work/_probe_stats.py`): 160 blocks carry a `$Team:` —
-80 friendly, 80 hostile (78 `hostile` + 1 `Hostile` + 1 `evil`, matching `_hostile_char_blocks`).
-All ten numeric fields are present in all 160 blocks, with wide width spreads, so a same-width
-shuffle is legal — e.g. hostile `$Max Hit Points` splits w2×11 / w3×58 / w4×11, hostile
-`$Attack Radius` is w3 for all 80. Also present and unused by any transform yet: `$Teamwork`,
-`$Conservation`, `$Slow/Fast/Moving turn rate`, `$Experience Gained`, `$Skill`, `$Damage`,
-`+Resistances`. There is **no** Strength/Dexterity/Intelligence — "player stats" here means
-HP / AP / aggressiveness / ranges / turn rates.
+**1. `player_stats_random` / `enemy_stats_random`** — **DONE (2026-09-30).** Both stat shuffles
+are built, registered with a `style` option (`floor`/`pure`), wired into the modes `enemy_stats`,
+`player_stats` and `stat_chaos`, and measured. See `FEATURES.md` §2.
 
-**2. `rooms_shuffle`** (`PLANNED.md` §1.5) — permute `$Start position` anchors between
-placements of the same kind *within* a level; the level graph, doors and quests never change.
+**2. `rooms_shuffle`** — **DONE (2026-09-30).** The within-level `$Start position` anchor
+permutation (option `how` = `shuffle`/`swap`), shipped as transform `rooms_shuffle` and mode
+`rooms` (**Random Rooms**). A level is read from the stream itself: one `#Navpoints` section
+(header to the next `#End`) per level script entry. Measured on the retail disc at seed `ROOMS1`:
+4,257 placements across **108 level sections**, **188 groups, 4,080 edits / 7,790 bytes**, 43 lone
+placements held; size-preserving (suite C green). `$player*` start slots and `$zzz*` disarm
+sentinels are pinned. **Unverified in game.**
 
-**3. Then** Boss Rush (needs a boss inventory), Collectionthon (blocked on a completion
-mechanism), and the open in-game checks — `PLANNED.md` §2.8 (the honest door crossing),
-§2.14 (217 of the 218 doors have never been watched), §2.16 (the `chest_items` grant).
+**3. NPC Hunt** — **DONE (2026-09-30)** as mode `npc_hunt` over the shipped `spawn_shuffle` +
+`npc_character_shuffle`. The stronger version (NPCs relocated across *levels*) is still
+**designed** (`PLANNED.md` 2.5).
+
+**4. Then** — **Boss Rush** (needs the `+Boss` inventory and the arena navpoint list first),
+**Item Hunt** (goods moved out of shop stock and quest rewards into containers), Collectionthon
+(blocked on a completion counter), and the open in-game checks — `PLANNED.md` §2.8 (the honest door
+crossing), §2.9 (the stat dials / a watched fight), §2.14 (217 of the 218 doors have never been
+watched), §2.16 (the `chest_items` grant).
 
 Then the test plan in `FEATURES.md` §8 runs down the whole catalogue.
 
-> **Doc note (2026-09-28):** this section was stale for a week — it still said the headline
-door feature was unbuilt when `door_destination_remap` had already landed (`DOOR-REMAP.md` §6.1,
-`PLANNED.md` §2.1/§2.2). Items 1–3 above are the corrected queue.
-
-Also still open from before:
-
-- **`DATA_PATCHES` sibling in `binary.py`** — an arbitrary byte-range patch class for `TABLES.VPP`,
-  carrying the same declare-and-refuse + read-back discipline. Design in `DOOR-REMAP.md` §6.1;
-  `F:\rando\S1\notes\apply_door_remap.py` is the reference implementation.
-- **Room Shuffle** — the safe default (content, not destinations); see `PROJECT.md` §6.
+> **Doc note (2026-09-30):** this section was stale *again* — items 1–2 still read "to build"
+> after the stat shuffles and `rooms_shuffle` had landed. The queue above is the corrected one.
+> The 2026-09-28 note (the door feature) stands historically. `DATA_PATCHES` is closed unbuilt on
+> purpose (`PLANNED.md` 2.2) — do not resurrect it.
 
 Doors are cheap now. **The risk did not go away with the cost** — destination rewrites still need
 the reachability guard (`RESEARCH-ENTRANCE-LOGIC.md` §2, §4).

@@ -130,6 +130,7 @@ uses a dial must set a value, and mode values are defaults, not overrides.**
 | `chest_shuffle` | 23 | 24 | built, unverified | weak by nature: most single-digit `+Give` values are item counts |
 | `chest_items` | 40 | 474 | built; **play-verified at the record level**, grant unverified | **the real chest randomisation.** What a container *yields* — the `+Messagebox:` name in a block that also carries `+Give:` — shuffled between equal-length names. 92 containers, 35 distinct yields, 13 pools. On the disc at seed `CHEST1`: 37 yields / 442 bytes (`how=swap`: 50 / 590); fixture (default options) 40 / 474. `+Give:` is never touched; gold only trades with gold (every gold yield is 4 characters and no item name is that short); nothing can be blanked. The `gold` option was built, measured as a no-op and removed. **In game 2026-09-22 (unforced A/B):** the running game's own `#Clicks` record for `Masad-Barrel-Closed03` reads `Cleansing Tonic` on vanilla and `Healing Draught` on the CHEST1 disc — field offset `0x273C64` confirmed at file level too — and `ngps_int_apply_targeting` (`0x00224110`) hands exactly that field (`rec+0x04`) to the inventory, amount `rec+0x108`, message `"Found %s!"`. **Nobody has clicked one:** the interaction module never runs headlessly (state global `0x01284E3C` pinned at `-1` for 39,577 samples, no `jal` to the handler), so the grant stays unverified. See `PLANNED.md` 2.16 |
 | `spawn_shuffle` | 4,467 | 9,737 | built, unverified | 4,594 `$Start position` anchors — relocates who stands where |
+| `rooms_shuffle` | 4,080 | 7,790 | built, unverified | **the safe half of randomised rooms.** Permutes `$Start position` anchors between placements *inside one level* — same namespace and same width only — so a level is furnished differently while every anchor still exists in the level it names. Doors, quests, the level graph and the navpoint definitions are never touched, so nothing can become unreachable (contrast `door_destination_remap`). Measured on the retail disc at seed `ROOMS1`: 4,257 placements across **108 level sections** (`#Navpoints`…`#End`), **188 groups, 4,080 edits / 7,790 bytes**, 43 lone placements held (no same-kind, same-width partner). Every one of the 4,257 anchors is defined in its own section. `$player*` start slots and `$zzz*` disarm sentinels are pinned. Option `how` (`shuffle`/`swap`); size-preserving |
 | `material_shuffle` | 76 | 272 | built, unverified | 337 `$Material`, 5 length classes |
 | `sound_shuffle` | 3,008 | 44,334 | built, unverified | 3,272 `.wav` refs |
 | `music_shuffle` | 1,565 | 19,928 | built, unverified | `$Soundtrack` + `$Sound` |
@@ -291,15 +292,21 @@ owner's list, organised"**. The work order below is mostly built now:
 
 * **Built (unverified)** — `enemies_amount` (4,067 at `none` / 2,852 at `few` / 0 at `normal` / 872 at `many` / 1,783 at `all`), `shops_free` (477), `shops_crazy` (479), `shops_none` (86). These are in the measured
   catalogue above; none of them has been watched in game yet.
-* **Built (unverified) — NTO Live** — `enemy_hp_set` (the "randomised enemy hp" lever, one settable
-  value; 160 HP fields on the retail disc; §2). The full `enemy_stats_random` shuffle is still to build.
-* **Still to build** — `player_stats_random`, `enemy_stats_random`, `rooms_shuffle`
-  (all mechanism-known), plus **Boss Rush / NPC Hunt (cross-level)** which need an inventory first,
-  and **Collectionthon** which stays blocked with its reason (the game has no collection counter).
+* **Built (unverified) — the stat shuffles and rooms (2026-09-30)** — `enemy_stats_random`,
+  `player_stats_random` (the two stat transforms, each with the `style` option) and
+  `rooms_shuffle` (within-level anchor permutation, `how` option) are all registered and
+  measured. `rooms_shuffle` also ships a Mode (`rooms` — **Random Rooms**), and the requested
+  **NPC Hunt** has a Mode (`npc_hunt`) over the shipped `spawn_shuffle` +
+  `npc_character_shuffle`. All are in the measured catalogue above; none watched in game yet.
+* **Still to build** — **Boss Rush** (needs the `+Boss` inventory and the arena navpoint list
+  first), **NPC Hunt (cross-level)** (needs the placement/level cross-reference checked), and
+  **Item Hunt** (goods moved out of shops/quest rewards into containers). **Collectionthon**
+  stays blocked with its reason (the game has no collection counter).
 
 Work order, value ÷ risk: ~~`enemies_amount` → the three shop levers → `chest_items`~~ *(all three
-built)* → ~~enemy hp lever~~ *(`enemy_hp_set` built)* → the two stat transforms → `rooms_shuffle` →
-Boss Rush → Collectionthon.
+built)* → ~~enemy hp lever~~ *(`enemy_hp_set` built)* → ~~the two stat transforms → `rooms_shuffle`~~
+*(all three built 2026-09-30)* → ~~NPC Hunt mode~~ *(built 2026-09-30)* → Boss Rush → Item Hunt →
+Collectionthon.
 
 ---
 

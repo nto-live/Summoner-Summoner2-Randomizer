@@ -8,9 +8,9 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 
 | | count |
 |---|---|
-| Modes | 43 |
-| Transforms | 54 |
-| Option-bearing transforms | 19 |
+| Modes | 45 |
+| Transforms | 55 |
+| Option-bearing transforms | 20 |
 | Binary (executable) patches | 4 |
 | Blocked / pending, with a recorded reason | 6 |
 | Transforms not reachable from any mode | 0 |
@@ -200,6 +200,21 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 - **Transforms (2):** `sound_shuffle`, `music_shuffle`
 - Every sound effect and music cue is shuffled. The loudest, safest, funniest mode in the list.
 
+### `rooms` — Random Rooms
+
+- **Tier:** `build-verified`
+- **Risk:** low — anchors permute inside one level only; graph and doors untouched
+- **Transforms (1):** `rooms_shuffle`
+- **Options preset:** `rooms_shuffle.how=shuffle`
+- Randomised rooms, the safe half: within each level the placements swap their $Start position anchors, so a level is furnished differently while every anchor still exists in that level. Doors, quests, the level graph and the navpoint definitions never change, so nothing can become unreachable.
+
+### `npc_hunt` — NPC Hunt
+
+- **Tier:** `build-verified`
+- **Risk:** medium — quest NPCs can be re-cast or relocated; quests may not complete
+- **Transforms (2):** `spawn_shuffle`, `npc_character_shuffle`
+- NPCs are neither where you left them nor who you expect: every placement's $Start position anchor moves within its level, and who stands there ($Character) is shuffled among equal lengths. The people of the world are relocated and re-cast. Cross-level NPC relocation is a designed extension, not shipped here - see PLANNED.md 2.5.
+
 ### `monster_chaos` — Monster Chaos
 
 - **Tier:** `build-verified`
@@ -373,17 +388,18 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 | `model_ref_shuffle` | .mvf model references reshuffled among equal lengths. | — | 3 (chaos...) |
 | `music_shuffle` | Shuffles $Soundtrack / $Sound — the wrong track plays in the wrong place. | — | 5 (everything...) |
 | `music_tracks_shuffle` | Shuffles the background music tracks ($Soundtrack) among equal-length names, so the wrong track plays in the wrong place - but sound effects are left alone. Use music_shuffle instead if you want SF... | — | 1 (music_only) |
-| `npc_character_shuffle` | Shuffles $Character values — who stands where changes. | — | 3 (chaos...) |
+| `npc_character_shuffle` | Shuffles $Character values — who stands where changes. | — | 4 (chaos...) |
 | `permadeath` | Disables the revive ability and neutralises Revive Scroll pickups so death sticks. Both are table-defined. Risky: an unknown name may error. | `block_ability`, `block_items` | 1 (hardcore) |
 | `player_stats_random` | Shuffles the playable party's numbers among themselves — HP, ability points, aggression, ranges and turn rates (this game has no Str/Dex/Int). style=floor keeps each value in its own width tier; st... | `style` | 2 (player_stats, stat_chaos) |
 | `ring_hunt` | Opens the Forge of Urath at a chosen event instead of after all eight rings. The game has no ring counter — the ending is gated by the single flag ready_for_end, which is 13 characters, so any 13-c... | `anchor`, `count`, `safe_only` | 3 (ring_hunt...) |
+| `rooms_shuffle` | Randomised rooms, the safe half: permutes $Start position anchors between placements INSIDE one level (same kind, same width), so a level is furnished differently while every anchor still exists in... | `how` | 1 (rooms) |
 | `shop_shuffle` | Shuffles $Value prices among equal widths. | — | 6 (everything...) |
 | `shops_crazy` | Every $Value price becomes the largest value its own field can hold (all 9s). | — | 1 (crazy_prices) |
 | `shops_free` | Every $Value price becomes 0, padded to its own field width. Everything is free. | — | 1 (free_shops) |
 | `shops_none` | Re-points the placements that name a +Shop character at equal-length non-shopkeeper names, so the shopkeeper is never reached and the shop is absent from the world. The definitions themselves are n... | — | 1 (no_shops) |
 | `slot_shuffle` | Shuffles +Slot / $Slot, so gear lands in the wrong equipment slot. | — | 2 (everything, total_chaos) |
 | `sound_shuffle` | Shuffles every .wav reference, so the wrong noise plays everywhere. Very audible, no progression risk. | — | 6 (everything...) |
-| `spawn_shuffle` | Shuffles $Start position anchors, so NPCs and creatures appear at other points in the level. Relocates who stands where. | — | 6 (everything...) |
+| `spawn_shuffle` | Shuffles $Start position anchors, so NPCs and creatures appear at other points in the level. Relocates who stands where. | — | 7 (everything...) |
 | `vfx_shuffle` | Shuffles .vfx references — the wrong visual effect fires for a spell. | — | 3 (everything...) |
 | `weapon_attack_max` | Sets every weapon's $Damage to one high value (default 999, clamped into each field's own width). Scoped to weapon records by the adjacent $Damage Type marker, so creature damage is never touched. ... | `value` | 1 (power_trip) |
 | `xp_boost` | Scales every +AddXP: reward up inside its own digit width. Kills the grind. In-game effect unverified. | — | 6 (short...) |

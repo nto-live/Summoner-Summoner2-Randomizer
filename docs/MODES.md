@@ -38,7 +38,7 @@ of: **exists** (shipped), **build now** (mechanism known, size-preserving, no un
 | **Oops All Enemies** | every placement becomes hostile: 2,037 peaceful placements re-pointed at creature names, plus the 2,220 monsters kept and randomised | **built, unverified** — mode `oops_all_enemies`: `enemies_amount` all (1,783 conversions) + `enemies_random` |
 | **Roguelike** | the pressure stack: creature stats, spawns, loot, shops, chests scrambled; XP cut; prices up | **exists** (`roguelike`) |
 | **Item Hunt** | loose pickups re-scattered (`item_scatter`) *and* items moved out of shop stock and quest rewards into containers, so they have to be found | **partially exists** — the scatter half ships; the "out of shops, into chests" half is `chest_items` + shop-stock work |
-| **NPC Hunt** | NPCs stop being where you left them: placement anchors shuffled (`spawn_shuffle`) and identities shuffled (`npc_character_shuffle`), stacked into one mode | **build now** (a mode over two shipped transforms); the stronger version — NPCs relocated across *levels* — is **designed** |
+| **NPC Hunt** | NPCs stop being where you left them: placement anchors shuffled (`spawn_shuffle`) and identities shuffled (`npc_character_shuffle`), stacked into one mode | **built 2026-09-30** (mode `npc_hunt`), literally a mode over the two shipped transforms; the stronger version — NPCs relocated across *levels* — is **designed** |
 | **Collectionthon** | a run that is about collecting: all pickups + all chest contents relocated, and the ending gated on having collected them | **designed, and partly blocked**: the game has no collection counter. Two candidate mechanisms: (a) rename an unused `+Event:` flag to `ready_for_end` and set it at the last collection point — cheap but only checks one item; (b) a binary patch to gate the ending on a counter — the layer exists, the counter does not. Reason recorded rather than hand-waved |
 
 ### Options
@@ -54,9 +54,9 @@ of: **exists** (shipped), **build now** (mechanism known, size-preserving, no un
 | **Make it all crazy numbers** | every `$Value` → the largest value its field can hold (`999`, `9999`…) | **built, unverified** — `shops_crazy` (479 edits) |
 | **No shops** | re-point the placements that name a `+Shop` character at equal-length non-shopkeepers, so the shop does not exist | **built, unverified** — `shops_none` (86 placements across 46 shopkeepers); note the marker lives on the character's dialogue definition, not `#Character Info` |
 | **Randomized characters** | shuffle `$Character` values between equal lengths — who stands where | **exists** (`npc_character_shuffle`) |
-| **Randomized rooms** | permute what populates a level *within* the level: shuffle `$Start position` anchors between placements of the same kind in the same level, so rooms are furnished differently while the level graph, doors and quests stay intact. This is the safe half of the design fork in `RESEARCH-ENTRANCE-LOGIC.md` §2 | **build now, first version** — `rooms_shuffle`. The deeper version (a level's whole interior swapped with another's) is **designed** |
-| **Randomized enemy hp and stats** | three levers now: `enemy_hp_set` *sets* every hostile creature's HP to one value you pick (new, NTO Live); `enemy_difficulty` *scales* hit points/aggression/ranges; `creature_stats_shuffle` *shuffles* speed/weight/attack radius. The remaining "shuffle the hostile `#Character Info` numbers themselves" form is `enemy_stats_random` | **partially built** — `enemy_hp_set` **built, unverified** (option `value`, default 1, min 1, max 999; 160 HP fields on the retail disc; separate from `enemy_stats_random`); the full stat shuffle `enemy_stats_random` is still **build now** |
-| **Randomized player stats** | shuffle the numeric fields between **friendly** `#Character Info` blocks (the playable party), equal widths only | **build now** — `player_stats_random` |
+| **Randomized rooms** | permute what populates a level *within* the level: shuffle `$Start position` anchors between placements of the same kind in the same level, so rooms are furnished differently while the level graph, doors and quests stay intact. This is the safe half of the design fork in `RESEARCH-ENTRANCE-LOGIC.md` §2 | **built 2026-09-30** — transform `rooms_shuffle` (option `how`), mode `rooms` (**Random Rooms**); 4,080 edits / 7,790 bytes at seed ROOMS1. The deeper version (a level's whole interior swapped with another's) is **designed** |
+| **Randomized enemy hp and stats** | three levers now: `enemy_hp_set` *sets* every hostile creature's HP to one value you pick (new, NTO Live); `enemy_difficulty` *scales* hit points/aggression/ranges; `creature_stats_shuffle` *shuffles* speed/weight/attack radius. The remaining "shuffle the hostile `#Character Info` numbers themselves" form is `enemy_stats_random` | **partially built** — `enemy_hp_set` **built, unverified** (option `value`, default 1, min 1, max 999; 160 HP fields on the retail disc; separate from `enemy_stats_random`); the full stat shuffle `enemy_stats_random` **and** `player_stats_random` are **built** (2026-09-30, `style` option) |
+| **Randomized player stats** | shuffle the numeric fields between **friendly** `#Character Info` blocks (the playable party), equal widths only | **built 2026-09-30** — `player_stats_random` (`style` option) |
 
 ### The build queue this produces
 
@@ -73,7 +73,7 @@ Ordered by value ÷ risk, all size-preserving:
 
 ---
 
-## Modes (34)
+## Modes (45)
 
 | Mode | What it changes | Tx | Risk |
 |---|---|---|---|
@@ -91,6 +91,8 @@ Ordered by value ÷ risk, all size-preserving:
 | **Visual Chaos** | item icons, spell effects, fog, cameras | 4 | low |
 | **Chaos** | characters, models, cutscenes, materials | 5 | low |
 | **Monster Chaos** | creature stats + spawn points | 2 | medium |
+| **Random Rooms** | within-level `$Start position` anchors permuted (same kind + width) | 1 | low |
+| **NPC Hunt** | placement anchors moved within a level + `$Character` shuffled | 2 | medium |
 | **Short Run** | cutscenes bypassed + XP scaled | 2 | medium |
 | **One Hour** | + creature level caps raised | 3 | medium |
 | **Fast Start** | cutscenes skipped, dialogue blanked, instant fades, combat scaled | 4 | medium |

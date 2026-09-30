@@ -1960,6 +1960,132 @@ def t_player_stats_random(blob, rng, style="floor"):
     return out, rep
 
 
+# --------------------------------------------------------------------------- #
+# Rooms - the safe half of "randomised rooms"
+#
+# A level's script entry is one `#Navpoints` section: it starts at the `#Navpoints` header and
+# runs to the next `#End`. Everything that populates the level - NPCs, monsters, props,
+# shopkeepers - is a `$Name:` record carrying `$Start position: "<navpoint>"`, and every one of
+# those anchors is a navpoint DEFINED in that same section (measured on the retail disc:
+# 4,257 of 4,257 placements). `rooms_shuffle` permutes those anchors between placements inside
+# one level, among anchors of the same namespace (`$npc`, `$hostile`, ...) and the same width,
+# so a level is furnished differently while every anchor still exists in the level it names and
+# the stream never changes size. Doors, quests, the level graph and the navpoint definitions are
+# never touched, so an unreachable region is impossible by construction (PLANNED.md 1.5).
+#
+# Pinned, never moved: `$player*` (a level's own start slots) and `$zzz*` (the disarm sentinel
+# `enemies_none` writes) - permuting either would undo work another transform owns.
+_ROOMS_SECTION_RE = re.compile(rb"#Navpoints")
+_ROOMS_END_RE = re.compile(rb"#End")
+_ROOMS_KIND_RE = re.compile(rb"[A-Za-z]+")
+_ROOMS_PINNED_KINDS = (b"$player", b"$zzz")
+
+
+def _rooms_kind(val: bytes) -> bytes:
+    """The anchor's namespace: `$npc033` -> `$npc`, `$hostile09-01` -> `$hostile`."""
+    if val[:1] == b"$":
+        m = _ROOMS_KIND_RE.match(val, 1)
+        return b"$" + (m.group(0) if m else b"")
+    return b"<raw>"
+
+
+def _rooms_sections(blob: bytes) -> list[tuple[int, int]]:
+    """(start, end) for every level script section: `#Navpoints` to the next `#End`/`#Navpoints`."""
+    import bisect
+    navs = [m.start() for m in _ROOMS_SECTION_RE.finditer(blob)]
+    ends = [m.start() for m in _ROOMS_END_RE.finditer(blob)]
+    out = []
+    for i, p in enumerate(navs):
+        nxt = navs[i + 1] if i + 1 < len(navs) else len(blob)
+        j = bisect.bisect_right(ends, p)
+        if j < len(ends):
+            nxt = min(nxt, ends[j])
+        out.append((p, nxt))
+    return out
+
+
+def t_rooms_shuffle(blob, rng, how="shuffle"):
+    """Permute `$Start position` anchors BETWEEN placements INSIDE one level.
+
+    The safe half of random rooms. A level's population is its placements - each a `$Name:`
+    record with a `$Start position: "<navpoint>"` anchor - and every anchor names a navpoint
+    defined in the same level script section (`#Navpoints` .. `#End`). Permuting those anchors
+    within the section leaves the level graph, the doors, the quests and the navpoint
+    definitions exactly as they were; every destination anchor still exists, so nothing can
+    become unreachable. Anchors are only traded between placements of the same namespace and
+    the same byte width, so the stream keeps its length.
+
+    `how`:
+      * ``shuffle`` (default) - every group's anchors are permuted.
+      * ``swap`` - pairs inside each group are traded instead.
+    A group of one is left alone and reported. `$player*` (level start slots) and `$zzz*`
+    (the `enemies_none` sentinel) are pinned and never move.
+    """
+    import bisect
+    rep = Report("rooms_shuffle")
+    how = str(how)
+    if how not in ("shuffle", "swap"):
+        rep.notes.append(f"unknown how {how!r} - pick 'shuffle' or 'swap'; nothing changed")
+        return blob, rep
+
+    sections = _rooms_sections(blob)
+    if not sections:
+        rep.notes.append("no #Navpoints sections found - nothing changed")
+        return blob, rep
+    starts = [s for s, _ in sections]
+
+    groups: dict[tuple[int, bytes, int], list[tuple[int, bytes]]] = {}
+    pinned = 0
+    for s, e in _placement_records(blob):
+        m = START_POS_RE.search(blob, s, e)
+        if not m:
+            continue
+        val = m.group(2)
+        kind = _rooms_kind(val)
+        if kind in _ROOMS_PINNED_KINDS:
+            pinned += 1
+            continue
+        sec = bisect.bisect_right(starts, s) - 1
+        if sec < 0:
+            continue
+        groups.setdefault((sec, kind, len(val)), []).append((m.start(2), val))
+
+    if not groups:
+        rep.notes.append("no movable $Start position anchors found - nothing changed")
+        return blob, rep
+
+    out = bytearray(blob)
+    changed = 0
+    held = 0
+    for _key, members in sorted(groups.items()):
+        if len(members) < 2:
+            held += len(members)
+            continue
+        vals = [v for _o, v in members]
+        if how == "swap":
+            order = list(range(len(vals)))
+            rng.shuffle(order)
+            for i in range(0, len(order) - 1, 2):
+                a, b = order[i], order[i + 1]
+                vals[a], vals[b] = vals[b], vals[a]
+        else:
+            rng.shuffle(vals)
+        for (off, old), new in zip(members, vals):
+            if new != old:
+                out[off:off + len(old)] = new
+                changed += 1
+
+    rep.changed = changed
+    rep.notes.append(f"{len(groups)} within-level anchor group(s) across "
+                     f"{len({k[0] for k in groups})} level section(s)")
+    rep.notes.append(f"{held} lone placement(s) held (no same-kind, same-width partner)")
+    if pinned:
+        rep.notes.append(f"{pinned} pinned ($player* start slots / $zzz* disarm sentinel)")
+    rep.notes.append("anchors permuted inside one level only; graph, doors, quests, navpoints untouched")
+    rep.notes.append("size-preserving: an anchor only ever moves into a field of its own width")
+    return bytes(out), rep
+
+
 def t_enemy_hp_set(blob, rng, value=1):
     """Set EVERY hostile creature's HP fields to a single user-chosen value.
 
@@ -2813,9 +2939,18 @@ OPTION_AWARE = {"ring_hunt", "xp_scale", "levelcap_set", "permadeath", "enemy_di
                 "enemies_none", "enemies_swarm", "enemies_random", "enemies_amount",
                 "door_destination_remap", "chest_items",
                 "weapon_attack_max", "armor_protect_max", "enemy_xp_random",
-                "enemy_xp_set", "enemy_damage_set"}
+                "enemy_xp_set", "enemy_damage_set", "rooms_shuffle"}
 
 OPTIONS = {
+    "rooms_shuffle": {
+        "how": {
+            "type": "choice", "default": "shuffle", "choices": ["shuffle", "swap"],
+            "label": "How",
+            "help": "'shuffle' permutes every anchor inside its own level, kind and width · "
+                    "'swap' trades pairs inside each group instead. Anchors never cross a "
+                    "level boundary.",
+        },
+    },
     "chest_items": {
         "how": {
             "type": "choice", "default": "shuffle", "choices": ["shuffle", "swap"],
@@ -3157,6 +3292,14 @@ TRANSFORM_INFO = {
         "Shuffles $Start position anchors, so NPCs and creatures appear at other "
         "points in the level. Relocates who stands where.",
     ),
+    "rooms_shuffle": (
+        "Rooms (within a level)",
+        "Randomised rooms, the safe half: permutes $Start position anchors between "
+        "placements INSIDE one level (same kind, same width), so a level is furnished "
+        "differently while every anchor still exists in that level. Doors, quests, the "
+        "level graph and the navpoint definitions are never touched, so nothing can become "
+        "unreachable. Size-preserving.",
+    ),
     "animation_shuffle": (
         "Animations",
         "Shuffles $Animation and +Animation class, so characters perform the wrong "
@@ -3342,6 +3485,7 @@ TRANSFORMS = {
     "shops_crazy": t_shops_crazy,
     "shops_none": t_shops_none,
     "door_destination_remap": t_door_destination_remap,
+    "rooms_shuffle": t_rooms_shuffle,
 }
 
 # second wave: generated from _SHUFFLE_SPECS so each is a plain (blob, rng) transform
@@ -3556,6 +3700,26 @@ MODES = {
                  "funniest mode in the list.",
         "transforms": ["sound_shuffle", "music_shuffle"],
         "risk": "low — audio only",
+    },
+    "rooms": {
+        "label": "Random Rooms",
+        "blurb": "Randomised rooms, the safe half: within each level the placements swap "
+                 "their $Start position anchors, so a level is furnished differently while "
+                 "every anchor still exists in that level. Doors, quests, the level graph and "
+                 "the navpoint definitions never change, so nothing can become unreachable.",
+        "transforms": ["rooms_shuffle"],
+        "options": {"rooms_shuffle": {"how": "shuffle"}},
+        "risk": "low — anchors permute inside one level only; graph and doors untouched",
+    },
+    "npc_hunt": {
+        "label": "NPC Hunt",
+        "blurb": "NPCs are neither where you left them nor who you expect: every placement's "
+                 "$Start position anchor moves within its level, and who stands there ($Character) "
+                 "is shuffled among equal lengths. The people of the world are relocated and "
+                 "re-cast. Cross-level NPC relocation is a designed extension, not shipped "
+                 "here - see PLANNED.md 2.5.",
+        "transforms": ["spawn_shuffle", "npc_character_shuffle"],
+        "risk": "medium — quest NPCs can be re-cast or relocated; quests may not complete",
     },
     "monster_chaos": {
         "label": "Monster Chaos",
