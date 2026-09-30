@@ -261,16 +261,49 @@ outside the declared fields). A `DATA_PATCHES` registry would have been invented
 problem that does not exist. `DOOR-REMAP.md` §6.1's `binary.py` sibling is therefore closed
 unbuilt, deliberately.
 
-### 2.3 Boss Rush
+### 2.3 Boss Rush — **DONE (within-level gather); the single global arena is BLOCKED**
 **Requested as:** "Boss Rush".
 Bosses are placements carrying `+Boss`. v1 re-points every boss placement's `$Start position` at
 navpoints inside a single arena level, so the bosses stand together and can be fought in one place.
 **Needs first:** the boss inventory (blocks carrying `+Boss`) and the arena's navpoint list.
 A *sequential* gauntlet — arena → arena chaining — rides on the level graph and is a later item.
 
-### 2.4 Item Hunt — the "out of the shops, into the chests" half
+**Built 2026-09-30 — and the mechanism had to be corrected by measurement.** The boss inventory is
+real: **25** `+Boss` placements across **11** level sections. But the requested "send them all to one
+arena" cannot work by rewriting the anchor, and the reason is now measured, not guessed: a
+navpoint name is **not globally unique** — `$npc001` is declared in **107** different level
+sections (and `$player1-01` in 102) — so `$Start position` resolves **inside the level that declares
+it**. A boss pointed at another level's navpoint would simply never spawn (exactly the `$zzz`
+mechanism `enemies_none` relies on, which is in-game verified). Every one of the game's own 4,257
+placement anchors is declared in its own section, which is consistent with that and with nothing
+else that leaves the game working.
+
+So the shipped transform gathers each level's bosses **within that level**: every boss whose anchor
+is N bytes is re-pointed at one navpoint of exactly N bytes declared in the same section (the field
+is length-neutral, so the archive cannot shift). Measured, seed `RUSH1`: arena resolves to section
+150 (**5** boss placements, 31 navpoints) → **5 anchors rewritten / 7 bytes**; **20** bosses in other
+levels left unchanged and reported. Ships as transform `boss_rush` (option `arena` = `auto` or a
+section index) and mode `boss_rush`. **Unverified in game.**
+
+**The single global arena is BLOCKED** on moving placement records between level entries, which
+needs *extra bytes* — the archive-slack question (≈619 KB unused, needs a boot test). Recorded here
+rather than shipped broken. The alternative that could gather them for real is to re-point a level's
+*own* placements at boss creature names (`enemies_swarm`'s mechanism) — sound and size-preserving,
+but a different feature; not built, not requested in that form.
+
+### 2.4 Item Hunt — the "out of the shops, into the chests" half — **DONE**
 `item_scatter` already moves loose pickups. This item moves goods out of shop stock and quest
 rewards and into containers, so they have to be found rather than bought.
+
+**Built 2026-09-30.** The sources are the shop's `+Buy List:`/`+Sell List:` stock (47 + 47 lists,
+4,455 entries, 332 distinct names) and the `+Gain Item:` quest rewards (157). The destinations are
+the container yields `chest_items` already uses (92 slots, 72 of them non-gold). Each good is
+**exchanged** with a container yield of the **same byte width**, and the container's old yield takes
+the good's shelf/reward slot — an exchange, never a deletion, so nothing is lost or invented and
+the stream stays the same length. Measured, seed `HUNT1`: **69 exchanges / 1,676 bytes**, 4,543
+goods held (no equal-width container slot — the acceptance rule). Gold yields are pooled out. Ships
+as transform `item_hunt` (option `sources` = `shops`/`quest`/`both`) and mode `item_hunt`, stacked
+with `item_scatter`. **Unverified in game.**
 
 ### 2.5 NPC Hunt — cross-level relocation
 The mode built from `spawn_shuffle` + `npc_character_shuffle` ships first; relocating NPCs to
@@ -464,6 +497,39 @@ self-contained and offline)
 | Summoner 2 (any of it) | the VPP v2 reader does not exist |
 | **Skip the startup movie** (`skip_intro`) | **present-but-pending — no longer blocked on the address.** The movie-start call site is now **resolved** in `binary.py` (`va=0x002419C0` → `jr $ra`, delay-slot `li v0,1` at `+0x4`, covering the THQ logo, attract demo and Volition logo). The patch deliberately keeps a `blocked` reason so it writes nothing and reports why; it is exposed as an independent UI toggle and via `--binary skip_intro`. The remaining step is **accepting it for release** (delete the `blocked=` line, then boot-/play-verify) — out of scope for the NTO Live feature (Non-Goal). See **`RESEARCH-SKIP-INTRO.md`**. Host-side (N100) verification — the disc and Ghidra project are there, not in the repo |
 | **Disable the opening tutorial** (masad tutorial popups) | **Mechanism resolved in Ghidra 2026-09-28; not yet patched.** The `masad_*_tutorial` names are `+Flag:` declarations in the `masad` level table (`masad_basic_controls_tutorial`, `_dialogue_tutorial_part1/2a/2b/3`, `_basic_combat_tutorial_part1/2`, `_spells_tutorial`, `_skills_tutorial`, `_chain_attack_tutorial`, `_level_up_tutorial_part1/2`). The **logic** is in the ELF, not the text layer, so it is NOT a table edit. Each tutorial step is gated by a function like `FUN_0023c8f0` that calls **`flag_is_set` @ `0x001f10a8`** (returns nonzero if the flag is already set → the step is SKIPPED via `bne v0,zero`), and only if unset does it fire the popup then call **`flag_set` @ `0x001f11e8`** (`a3=1`). So the flag pattern is *fire-once*: a set flag means "already shown". There is also an **`Ignore tutorial` debug command** (string @ `0x0127dec0`, table entry @ `0x0023da14`) whose handler toggles a global. **Safe disable options (unbuilt):** (a) NOP the tutorial-fire in each of the ~13 gates (many sites, each needs read-back); (b) find and force-on the `Ignore tutorial` global at boot (one site, cleaner — needs its address); (c) pre-set the masad tutorial flags at level init. **Do NOT** patch the shared `flag_is_set`/`flag_set` — every quest/event flag routes through them, so that would break progression. Not attempted because it is a multi-site or global-hunt binary patch that must be play-verified, and rushing it risks a boot hang (as neutering the intro `$Cutscene` token did). Host-side (N100/Ghidra) work |
+
+---
+
+## 3b. Summoner 2 - the placeholder plan (recorded, not built)
+
+Summoner 1 is completed first; nothing here is built in this feature. The plan exists so the path
+is written down while it is still cheap to describe, and so no one mistakes "Summoner 2" for a
+supported target today.
+
+**Blocked by one missing component: a VPP v2 reader.** Summoner 2 ships its stream in a second
+archive format. Until that reader exists, *every* Summoner 2 transform is blocked - there is no
+"partial" that is honest. `config.json` already lists `F:\rando\S2\iso\Summoner 2.iso` as a
+disc, so the disc is on hand; the reader is not.
+
+**The extension plan once a reader exists** (in this order, each following the same Fully Fleshed
+Bar as Summoner 1):
+
+1. **Reader + probe.** A `VppFile` v2 parser behind the same interface `rando_core` already uses,
+   plus a probe that prints entry count, alignment and total stream length - and *refuses* if the
+   lengths disagree, the same declare-and-refuse discipline the Summoner 1 engine holds to.
+2. **Catalogue audit.** Run the Summoner 1 transform set against the Summoner 2 stream and record,
+   per transform, whether it applies unchanged, applies with new field names, or is meaningless.
+   A transform is only *listed* for Summoner 2 once it is measured on that stream.
+3. **Per-transform port.** Field-by-field, size-preserving first; any edit that would grow the
+   archive waits on Summoner 2's own archive-slack answer.
+4. **Separate registries.** Summoner 2 modes and transforms are their own sets. The desktop
+   presents them only when a Summoner 2 disc is the selected source - the UI already builds from
+   the catalogue, so this is a data change, not a code fork.
+5. **Verification tiers.** Everything lands at `built, unverified` until the headless rig has
+   seen it, exactly as Summoner 1 was held to.
+
+**Do NOT** build the VPP v2 reader as part of Summoner 1 completion. It is recorded here, and it
+stays blocked until the Summoner 1 acceptance bar is met.
 
 ---
 

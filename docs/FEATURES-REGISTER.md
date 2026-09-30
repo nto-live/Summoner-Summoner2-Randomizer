@@ -8,9 +8,9 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 
 | | count |
 |---|---|
-| Modes | 45 |
-| Transforms | 55 |
-| Option-bearing transforms | 20 |
+| Modes | 47 |
+| Transforms | 57 |
+| Option-bearing transforms | 22 |
 | Binary (executable) patches | 4 |
 | Blocked / pending, with a recorded reason | 6 |
 | Transforms not reachable from any mode | 0 |
@@ -215,6 +215,22 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 - **Transforms (2):** `spawn_shuffle`, `npc_character_shuffle`
 - NPCs are neither where you left them nor who you expect: every placement's $Start position anchor moves within its level, and who stands there ($Character) is shuffled among equal lengths. The people of the world are relocated and re-cast. Cross-level NPC relocation is a designed extension, not shipped here - see PLANNED.md 2.5.
 
+### `boss_rush` — Boss Rush
+
+- **Tier:** `build-verified`
+- **Risk:** medium — bosses change position within their level; untested in game
+- **Transforms (1):** `boss_rush`
+- **Options preset:** `boss_rush.arena=auto`
+- The bosses stand together: every level's boss placements are gathered onto a single navpoint of that level, so a boss fights with the others instead of alone. The one-global-arena version is documented as blocked - a navpoint name resolves only inside the level that declares it (names repeat across up to 107 levels), so moving placements BETWEEN levels needs extra bytes.
+
+### `item_hunt` — Item Hunt
+
+- **Tier:** `build-verified`
+- **Risk:** low — names trade slots at equal width; no totals moved
+- **Transforms (2):** `item_scatter`, `item_hunt`
+- **Options preset:** `item_hunt.sources=both`
+- Goods have to be found, not bought: shop stock and quest-reward item names are exchanged into containers (equal width only), and the container's old yield takes the shelf/reward slot. Stacked with the loose-pickup scatter. Nothing is lost or invented - only where a thing is found changes.
+
 ### `monster_chaos` — Monster Chaos
 
 - **Tier:** `build-verified`
@@ -353,6 +369,7 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 | `action_shuffle` | Shuffles +Action verbs — the AI and script instructions. Characters do the wrong things. Actions drive scripted sequences, so this CAN break them. | — | 2 (behaviour_chaos, total_chaos) |
 | `animation_shuffle` | Shuffles $Animation and +Animation class, so characters perform the wrong movements. | — | 3 (everything...) |
 | `armor_protect_max` | Sets every armour item's $Protection to one high value (default 999, clamped into each field's own width). Scoped to $Armor: record spans, so creature protection is never touched. Size-preserving. ... | `value` | 1 (power_trip) |
+| `boss_rush` | Gathers a level's `+Boss` placements onto a single navpoint of that same level (same width only), so the bosses stand together and are fought in one place. Not a single global arena: a navpoint nam... | `arena` | 1 (boss_rush) |
 | `camera_shuffle` | Shuffles $Camera and .csc, so cutscenes are shot from the wrong angles. | — | 3 (everything...) |
 | `chest_items` | Shuffles WHAT a container yields — the +Messagebox: name in a block that also carries +Give: — between equal-length names, so a cheap crate can hold something precious. The amount is not touched. | `how` | 1 (chest_shuffle) |
 | `chest_shuffle` | Shuffles +Give payouts among equal widths. Most single digits are item counts, so only the multi-digit gold payouts really move. | — | 6 (everything...) |
@@ -380,7 +397,8 @@ The verification tiers themselves are defined in `TEST-PLAN.md`.
 | `fade_instant` | Zeroes every scene fade duration, so the pauses between scenes, cutscenes and level loads disappear. Presentation only. | — | 3 (total_chaos...) |
 | `fog_shuffle` | Shuffles $Fog values so each level's atmosphere and draw distance changes. | — | 3 (everything...) |
 | `icon_shuffle` | Shuffles $Icon and .vbm refs, so items and gear display the wrong art. | — | 5 (everything...) |
-| `item_scatter` | Shuffles which item sits at which loose pickup point. | — | 6 (everything...) |
+| `item_hunt` | Moves goods out of the shop stock (+Buy List: / +Sell List:) and the quest rewards (+Gain Item:) and into the containers: each good is exchanged, equal width only, with a container yield, and that ... | `sources` | 1 (item_hunt) |
+| `item_scatter` | Shuffles which item sits at which loose pickup point. | — | 7 (everything...) |
 | `levelcap_raise` | Pushes +Levelcap: values up, same field width, so creatures scale with you. In-game effect unverified. | — | 7 (one_hour...) |
 | `levelcap_set` | Scales every +Levelcap: by a percentage you choose — how high creatures are allowed to grow. 100 = vanilla, 200 = twice as high. | `percent` | 1 (progression) |
 | `lock_shuffle` | Shuffles the +Locked: values across every door, so a door's lock no longer matches what is behind it. | — | 3 (doors...) |

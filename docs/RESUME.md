@@ -57,11 +57,21 @@ sentinels are pinned. **Unverified in game.**
 `npc_character_shuffle`. The stronger version (NPCs relocated across *levels*) is still
 **designed** (`PLANNED.md` 2.5).
 
-**4. Then** — **Boss Rush** (needs the `+Boss` inventory and the arena navpoint list first),
-**Item Hunt** (goods moved out of shop stock and quest rewards into containers), Collectionthon
-(blocked on a completion counter), and the open in-game checks — `PLANNED.md` §2.8 (the honest door
-crossing), §2.9 (the stat dials / a watched fight), §2.14 (217 of the 218 doors have never been
-watched), §2.16 (the `chest_items` grant).
+**4. Boss Rush / Item Hunt** — **BUILT 2026-09-30.**
+* `boss_rush` — boss inventory = **25** `+Boss` placements across **11** level sections; gathers
+  each level's bosses onto one navpoint of that level (5 rewritten / 7 bytes at seed `RUSH1`).
+  **The single global arena is BLOCKED**, and it is measured, not guessed: navpoint names repeat
+  across up to **107** level sections, so `$Start position` resolves per level and a cross-level
+  anchor simply would not spawn. Moving placements between levels needs extra bytes (archive
+  slack). See `PLANNED.md` 2.3.
+* `item_hunt` — shop stock (`+Buy List:`/`+Sell List:`, 4,455 entries) and quest rewards
+  (`+Gain Item:`, 157) exchange into container yields at equal width; **69 exchanges / 1,676 bytes**
+  at seed `HUNT1`, 4,543 held. Mode `item_hunt` = `item_scatter` + `item_hunt`. See `PLANNED.md` 2.4.
+Both **unverified in game**, both size-preserving (suite C green).
+
+**5. Then** — Collectionthon (blocked on a completion counter) and the open in-game checks —
+`PLANNED.md` §2.8 (the honest door crossing), §2.9 (the stat dials / a watched fight), §2.14
+(217 of the 218 doors have never been watched), §2.16 (the `chest_items` grant).
 
 Then the test plan in `FEATURES.md` §8 runs down the whole catalogue.
 

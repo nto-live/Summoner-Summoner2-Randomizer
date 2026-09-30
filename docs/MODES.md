@@ -34,10 +34,10 @@ of: **exists** (shipped), **build now** (mechanism known, size-preserving, no un
 | Requested | Mechanism | Status |
 |---|---|---|
 | **Ring Hunt** | rename a 13-character `+Event:` flag to `ready_for_end`; `any-ring` = 4 anchors with a ring beside them | **exists** (`ring_hunt`) |
-| **Boss Rush** | bosses are placements carrying `+Boss`; the first version re-points every boss placement's `$Start position` at navpoints inside one arena level, so they stand together | **designed** — needs the boss inventory (blocks with `+Boss`) and the arena's navpoint list. A true gauntlet (arena → arena chaining) rides on the level graph |
+| **Boss Rush** | bosses are placements carrying `+Boss`; the first version re-points every boss placement's `$Start position` at navpoints inside one arena level, so they stand together | **built 2026-09-30** (mode `boss_rush`) — 25 `+Boss` placements across 11 levels gathered onto one navpoint of each level; the single global arena is **blocked** (navpoint names repeat across levels, so an anchor only resolves in its own level). A true gauntlet (arena → arena chaining) rides on the level graph |
 | **Oops All Enemies** | every placement becomes hostile: 2,037 peaceful placements re-pointed at creature names, plus the 2,220 monsters kept and randomised | **built, unverified** — mode `oops_all_enemies`: `enemies_amount` all (1,783 conversions) + `enemies_random` |
 | **Roguelike** | the pressure stack: creature stats, spawns, loot, shops, chests scrambled; XP cut; prices up | **exists** (`roguelike`) |
-| **Item Hunt** | loose pickups re-scattered (`item_scatter`) *and* items moved out of shop stock and quest rewards into containers, so they have to be found | **partially exists** — the scatter half ships; the "out of shops, into chests" half is `chest_items` + shop-stock work |
+| **Item Hunt** | loose pickups re-scattered (`item_scatter`) *and* items moved out of shop stock and quest rewards into containers, so they have to be found | **built 2026-09-30** — mode `item_hunt` = `item_scatter` + `item_hunt` (69 exchanges / 1,676 bytes at seed HUNT1); shop stock and `+Gain Item:` rewards trade into container yields at equal width |
 | **NPC Hunt** | NPCs stop being where you left them: placement anchors shuffled (`spawn_shuffle`) and identities shuffled (`npc_character_shuffle`), stacked into one mode | **built 2026-09-30** (mode `npc_hunt`), literally a mode over the two shipped transforms; the stronger version — NPCs relocated across *levels* — is **designed** |
 | **Collectionthon** | a run that is about collecting: all pickups + all chest contents relocated, and the ending gated on having collected them | **designed, and partly blocked**: the game has no collection counter. Two candidate mechanisms: (a) rename an unused `+Event:` flag to `ready_for_end` and set it at the last collection point — cheap but only checks one item; (b) a binary patch to gate the ending on a counter — the layer exists, the counter does not. Reason recorded rather than hand-waved |
 
@@ -73,7 +73,7 @@ Ordered by value ÷ risk, all size-preserving:
 
 ---
 
-## Modes (45)
+## Modes (47)
 
 | Mode | What it changes | Tx | Risk |
 |---|---|---|---|
@@ -91,6 +91,8 @@ Ordered by value ÷ risk, all size-preserving:
 | **Visual Chaos** | item icons, spell effects, fog, cameras | 4 | low |
 | **Chaos** | characters, models, cutscenes, materials | 5 | low |
 | **Monster Chaos** | creature stats + spawn points | 2 | medium |
+| **Boss Rush** | a level's bosses gathered onto one navpoint of that level | 1 | medium |
+| **Item Hunt** | loose pickups scattered + shop stock/quest rewards traded into containers | 2 | low |
 | **Random Rooms** | within-level `$Start position` anchors permuted (same kind + width) | 1 | low |
 | **NPC Hunt** | placement anchors moved within a level + `$Character` shuffled | 2 | medium |
 | **Short Run** | cutscenes bypassed + XP scaled | 2 | medium |

@@ -2086,6 +2086,214 @@ def t_rooms_shuffle(blob, rng, how="shuffle"):
     return bytes(out), rep
 
 
+# --------------------------------------------------------------------------- #
+# Boss Rush - gather a level's bosses onto one navpoint of that same level
+#
+# A boss is a placement record carrying `+Boss` (measured 2026-09-30: 25 of them across 11
+# level sections). The requested mode is "all bosses in one arena", but the anchor field is a
+# `$Start position: "<navpoint>"` NAME and navpoint names are NOT globally unique - `$npc001`
+# is declared in 107 different level sections (same for `$player1-01`, 102). So the name is
+# resolved per level, and a boss sent to a navpoint that its OWN level does not declare simply
+# never spawns (the `$zzz` mechanism `enemies_none` relies on, in-game verified).
+#
+# Therefore the sound, size-preserving version gathers each level's bosses WITHIN that level:
+# every `+Boss` placement whose anchor is N bytes long is re-pointed at one navpoint of exactly
+# N bytes declared in the same level, so they stand together and are still found. The
+# cross-level single arena is documented as blocked (it needs placement records moved between
+# level entries, i.e. extra bytes - the archive-slack question) in PLANNED.md.
+_NAVP_DEF_RE = re.compile(rb'(?m)^[ \t]*\$Name\s*:\s*"(\$[^"]+)"[ \t]*\r?\n[ \t]*\$Type')
+
+
+def _section_navpoints(blob: bytes, a: int, b: int) -> set[bytes]:
+    """Navpoint names DECLARED in [a, b): a `$Name: "$..."` line directly followed by `$Type:`."""
+    return {m.group(1) for m in _NAVP_DEF_RE.finditer(blob, a, b)}
+
+
+def t_boss_rush(blob, rng, arena="auto"):
+    """Gather a level's boss placements onto a single navpoint of that SAME level.
+
+    `arena` picks the level section to gather in: ``auto`` (default) = the section that holds
+    the most `+Boss` placements; or an integer section index. Because a navpoint name resolves
+    only inside the level that declares it, bosses in other levels are left alone and reported -
+    a true single arena is a documented blocked extension (see the banner above and PLANNED.md).
+
+    Size-preserving: an anchor is only ever replaced by a navpoint of the exact same byte
+    length, declared in the same section, so the entry cannot grow or shrink. A boss whose
+    width has no navpoint in the level is left where it is and counted as held.
+    """
+    import bisect
+    rep = Report("boss_rush")
+    sections = _rooms_sections(blob)
+    if not sections:
+        rep.notes.append("no #Navpoints sections found - nothing changed")
+        return blob, rep
+    starts = [s for s, _ in sections]
+
+    bosses: list[tuple[int, int, bytes]] = []
+    for s, e in _placement_records(blob):
+        seg = blob[s:e]
+        if b"+Boss" not in seg:
+            continue
+        m = START_POS_RE.search(seg)
+        if not m:
+            continue
+        sec = bisect.bisect_right(starts, s) - 1
+        if sec >= 0:
+            bosses.append((sec, s + m.start(2), m.group(2)))
+    if not bosses:
+        rep.notes.append("no +Boss placements found - nothing changed")
+        return blob, rep
+
+    by_sec: dict[int, list] = {}
+    for sec, off, val in bosses:
+        by_sec.setdefault(sec, []).append((off, val))
+    rep.notes.append(f"boss inventory: {len(bosses)} +Boss placement(s) across "
+                     f"{len(by_sec)} level section(s)")
+
+    if str(arena) in ("auto", "None", ""):
+        arena_sec = max(by_sec, key=lambda k: (len(by_sec[k]), -k))
+    else:
+        try:
+            arena_sec = int(arena)
+        except (TypeError, ValueError):
+            rep.notes.append(f"unusable arena {arena!r} - refused, nothing changed")
+            return blob, rep
+        if arena_sec not in by_sec:
+            rep.notes.append(f"arena section {arena_sec} holds no +Boss placement - nothing changed")
+            return blob, rep
+
+    a, b = sections[arena_sec]
+    navs = _section_navpoints(blob, a, b)
+    members = by_sec[arena_sec]
+    if not navs:
+        rep.notes.append(f"arena section {arena_sec} declares no navpoints - nothing changed")
+        return blob, rep
+
+    out = bytearray(blob)
+    moved = 0
+    held = 0
+    for w in sorted({len(v) for _o, v in members}):
+        pool = sorted(n for n in navs if len(n) == w)
+        if not pool:
+            held += sum(1 for _o, v in members if len(v) == w)
+            continue
+        target = pool[0]                      # every width class gathers onto ONE navpoint
+        for off, val in members:
+            if len(val) != w:
+                continue
+            if val == target:
+                held += 1
+                continue
+            out[off:off + w] = target
+            moved += 1
+
+    rep.changed = moved
+    elsewhere = sum(len(v) for k, v in by_sec.items() if k != arena_sec)
+    rep.notes.append(f"arena = section {arena_sec}: {len(members)} boss placement(s), "
+                     f"{len(navs)} navpoints; {held} held (no same-width navpoint there)")
+    if elsewhere:
+        rep.notes.append(f"{elsewhere} boss placement(s) in other levels left unchanged - "
+                         f"navpoint names repeat across levels, so an anchor only resolves in "
+                         f"its own level (a global arena is blocked, see PLANNED.md)")
+    rep.notes.append("size-preserving: an anchor only ever becomes a same-width navpoint")
+    return bytes(out), rep
+
+
+# --------------------------------------------------------------------------- #
+# Item Hunt - goods out of the shop stock and the quest rewards, into the containers
+# --------------------------------------------------------------------------- #
+# A shop's stock is a `+Buy List:` / `+Sell List:` header followed by one quoted item name per
+# line, terminated by `$End` (measured 2026-09-30: 47 + 47 lists, 4,455 entries, 332 distinct
+# names). A quest reward is a `+Gain Item: "<name>"` field (157 of them). The destinations are
+# the container yields `chest_items` already knows: the `+Messagebox:` name in a block that also
+# carries `+Give:` (92 slots, 35 distinct yields).
+_SHOP_LIST_RE = re.compile(rb"\+Buy List:|\+Sell List:")
+_SHOP_END = b"$End"
+_QUOTED_RE = re.compile(rb'"([^"]+)"')
+_GAIN_ITEM_RE = re.compile(rb'\+Gain Item:\s*"([^"]+)"')
+
+
+def _shop_stock(blob: bytes) -> list[tuple[int, int, bytes]]:
+    """(start, end, name) for every item name inside a shop `+Buy List:` / `+Sell List:` body."""
+    out = []
+    for m in _SHOP_LIST_RE.finditer(blob):
+        end = blob.find(_SHOP_END, m.end())
+        if end < 0:
+            continue
+        body = blob[m.end():end]
+        for q in _QUOTED_RE.finditer(body):
+            s = m.end() + q.start(1)
+            out.append((s, s + len(q.group(1)), q.group(1)))
+    return out
+
+
+def t_item_hunt(blob, rng, sources="both"):
+    """Trade a good out of the shop stock / quest rewards and into a container, equal width only.
+
+    `sources`: ``shops`` (the `+Buy List:`/`+Sell List:` stock), ``quest`` (the `+Gain Item:`
+    rewards), or ``both`` (default).
+
+    The move is an EXCHANGE, never a deletion: the good's name is written into an equal-length
+    container yield, and the yield that was in that container takes the good's old slot on the
+    shelf / in the reward. That keeps every entry the same byte length (so the 527-entry archive
+    never shifts) and loses nothing - it only decides that the good has to be FOUND rather than
+    bought or handed over. A good with no equal-width container slot is left in place and
+    counted as held, exactly as the acceptance criteria require.
+
+    Gold yields are pooled out (they are the 4-character `Gold`/`gold` and never trade with a
+    real item name), and so is anything already identical to its candidate slot.
+    """
+    rep = Report("item_hunt")
+    sources = str(sources)
+    if sources not in ("shops", "quest", "both"):
+        rep.notes.append(f"unknown sources {sources!r} - pick shops/quest/both; nothing changed")
+        return blob, rep
+
+    goods: list[tuple[int, int, bytes]] = []
+    if sources in ("shops", "both"):
+        s0 = _shop_stock(blob)
+        goods += s0
+        rep.notes.append(f"{len(s0)} shop-stock item(s)")
+    if sources in ("quest", "both"):
+        q0 = [(m.start(1), m.end(1), m.group(1)) for m in _GAIN_ITEM_RE.finditer(blob)]
+        goods += q0
+        rep.notes.append(f"{len(q0)} quest-reward item(s)")
+
+    slots = [(s, e, n) for s, e, n in _container_yields(blob) if n.lower() != _GOLD]
+    if not goods or not slots:
+        rep.notes.append("nothing to move (no goods or no non-gold container slots) - nothing changed")
+        return blob, rep
+
+    by_w_goods: dict[int, list] = {}
+    for t in goods:
+        by_w_goods.setdefault(len(t[2]), []).append(t)
+    by_w_slots: dict[int, list] = {}
+    for t in slots:
+        by_w_slots.setdefault(len(t[2]), []).append(t)
+
+    out = bytearray(blob)
+    moved = 0
+    for w in sorted(set(by_w_goods) & set(by_w_slots)):
+        g = by_w_goods[w][:]
+        s = by_w_slots[w][:]
+        rng.shuffle(g)
+        rng.shuffle(s)
+        for (gs, ge, gn), (ss, se, sn) in zip(g, s):
+            if gn == sn:
+                continue
+            out[gs:ge] = sn
+            out[ss:se] = gn
+            moved += 1
+
+    rep.changed = moved
+    rep.notes.append(f"{len(goods)} good(s) vs {len(slots)} non-gold container slot(s); "
+                     f"{moved} exchanged (good -> container, old yield -> shelf/reward)")
+    rep.notes.append(f"{max(0, len(goods) - moved)} good(s) left in place "
+                     f"(no equal-width container slot)")
+    rep.notes.append("size-preserving: a name only ever trades inside its own width")
+    return bytes(out), rep
+
+
 def t_enemy_hp_set(blob, rng, value=1):
     """Set EVERY hostile creature's HP fields to a single user-chosen value.
 
@@ -2939,9 +3147,29 @@ OPTION_AWARE = {"ring_hunt", "xp_scale", "levelcap_set", "permadeath", "enemy_di
                 "enemies_none", "enemies_swarm", "enemies_random", "enemies_amount",
                 "door_destination_remap", "chest_items",
                 "weapon_attack_max", "armor_protect_max", "enemy_xp_random",
-                "enemy_xp_set", "enemy_damage_set", "rooms_shuffle"}
+                "enemy_xp_set", "enemy_damage_set", "rooms_shuffle",
+                "boss_rush", "item_hunt"}
 
 OPTIONS = {
+    "boss_rush": {
+        "arena": {
+            "type": "str", "default": "auto",
+            "label": "Arena level",
+            "help": "'auto' = gather the level that holds the most bosses; or a level-section "
+                    "index. Bosses are gathered WITHIN the chosen level, because a navpoint name "
+                    "only resolves in the level that declares it (names repeat across up to 107 "
+                    "levels). Bosses in other levels are left unchanged.",
+        },
+    },
+    "item_hunt": {
+        "sources": {
+            "type": "choice", "default": "both", "choices": ["shops", "quest", "both"],
+            "label": "Where to take goods from",
+            "help": "'shops' = the +Buy List: / +Sell List: stock · 'quest' = +Gain Item: "
+                    "reward slots · 'both' (default). Each good is exchanged (equal width only) "
+                    "with a container yield, so it must be found rather than bought.",
+        },
+    },
     "rooms_shuffle": {
         "how": {
             "type": "choice", "default": "shuffle", "choices": ["shuffle", "swap"],
@@ -3300,6 +3528,22 @@ TRANSFORM_INFO = {
         "level graph and the navpoint definitions are never touched, so nothing can become "
         "unreachable. Size-preserving.",
     ),
+    "boss_rush": (
+        "Boss Rush",
+        "Gathers a level's `+Boss` placements onto a single navpoint of that same level (same "
+        "width only), so the bosses stand together and are fought in one place. Not a single "
+        "global arena: a navpoint name resolves only inside the level that declares it (names "
+        "repeat across up to 107 levels), so bosses in other levels are left unchanged - a "
+        "documented blocked extension. Size-preserving.",
+    ),
+    "item_hunt": (
+        "Item Hunt",
+        "Moves goods out of the shop stock (+Buy List: / +Sell List:) and the quest rewards "
+        "(+Gain Item:) and into the containers: each good is exchanged, equal width only, with "
+        "a container yield, and that container's old yield takes the good's shelf/reward slot. "
+        "A good with no equal-width container slot stays put. Nothing lost, nothing invented. "
+        "Size-preserving.",
+    ),
     "animation_shuffle": (
         "Animations",
         "Shuffles $Animation and +Animation class, so characters perform the wrong "
@@ -3486,6 +3730,8 @@ TRANSFORMS = {
     "shops_none": t_shops_none,
     "door_destination_remap": t_door_destination_remap,
     "rooms_shuffle": t_rooms_shuffle,
+    "boss_rush": t_boss_rush,
+    "item_hunt": t_item_hunt,
 }
 
 # second wave: generated from _SHUFFLE_SPECS so each is a plain (blob, rng) transform
@@ -3720,6 +3966,27 @@ MODES = {
                  "here - see PLANNED.md 2.5.",
         "transforms": ["spawn_shuffle", "npc_character_shuffle"],
         "risk": "medium — quest NPCs can be re-cast or relocated; quests may not complete",
+    },
+    "boss_rush": {
+        "label": "Boss Rush",
+        "blurb": "The bosses stand together: every level's boss placements are gathered onto a "
+                 "single navpoint of that level, so a boss fights with the others instead of "
+                 "alone. The one-global-arena version is documented as blocked - a navpoint name "
+                 "resolves only inside the level that declares it (names repeat across up to 107 "
+                 "levels), so moving placements BETWEEN levels needs extra bytes.",
+        "transforms": ["boss_rush"],
+        "options": {"boss_rush": {"arena": "auto"}},
+        "risk": "medium — bosses change position within their level; untested in game",
+    },
+    "item_hunt": {
+        "label": "Item Hunt",
+        "blurb": "Goods have to be found, not bought: shop stock and quest-reward item names are "
+                 "exchanged into containers (equal width only), and the container's old yield "
+                 "takes the shelf/reward slot. Stacked with the loose-pickup scatter. Nothing is "
+                 "lost or invented - only where a thing is found changes.",
+        "transforms": ["item_scatter", "item_hunt"],
+        "options": {"item_hunt": {"sources": "both"}},
+        "risk": "low — names trade slots at equal width; no totals moved",
     },
     "monster_chaos": {
         "label": "Monster Chaos",
