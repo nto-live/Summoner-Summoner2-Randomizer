@@ -5,6 +5,8 @@
   rush that is on-theme: everything dies in one hit.)
 - tutorial off: skip_tutorial (the working input-gate NOP) + skip_intro (free)
 - random drops: enemy_drops_random (shuffles which item each +Drop yields)
+- random chests: chest_items (shuffles what each container yields)
+- max XP per kill: enemy_xp_set value=9999 ($Experience Gained, clamped to field width)
 
 Seed BOSS1. Written in the workspace; ISO goes to the external out dir (see _paths.py).
 """
@@ -18,10 +20,14 @@ transforms = [
     "boss_rush",
     "enemy_hp_set",
     "enemy_drops_random",
+    "chest_items",
+    "enemy_xp_set",
 ]
 options = {
     "boss_rush": {"arena": "auto"},
     "enemy_hp_set": {"value": 1},
+    "chest_items": {"how": "shuffle"},
+    "enemy_xp_set": {"value": 9999},   # maximum XP that fits the field, per kill
 }
 binary_patches = [["skip_intro", {}], ["skip_tutorial", {}]]
 

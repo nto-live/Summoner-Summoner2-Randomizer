@@ -859,6 +859,48 @@ def t_chest_shuffle(blob, rng):
     return out, rep
 
 
+# Gold in Summoner is NOT an enemy drop - there is no enemy->gold mechanism in the tables (verified:
+# zero `+Drop: "Gold"`, and soldier records carry no gold field; see docs/lab/probe_gold.py). Gold
+# exists only as CONTAINER pickups: a `+Give: N` immediately followed by `+Messagebox: "Gold"`
+# (crates/barrels/wells). There are 17 of them. The `+Give` number is a FIXED-WIDTH field with no
+# padding (`+Give: 30\r\n`), so size-preservation caps us at the field's own digit count: a 1-digit
+# field maxes at 9, 2-digit at 99, 3-digit at 999. **1000 gold is impossible without adding a byte
+# and shifting the stream** (no gold field has 4 digits). So `gold_max` fills every gold pickup to
+# the largest value its field can hold (9s). This is the honest ceiling the data allows for "more
+# gold per pickup"; it does NOT make soldiers drop gold (the data has no such mechanism).
+_GOLD_GIVE_RE = re.compile(rb'(\+Give:\s*)(\d+)(\s*\r\n\+Messagebox:\s*"Gold")')
+
+
+def t_gold_max(blob, rng):
+    """Set every GOLD container pickup (`+Give: N` + `+Messagebox: "Gold"`) to the max its fixed-
+    width field allows (all 9s). Size-preserving; rng unused (deterministic). Honest limits: gold
+    is a container pickup, not an enemy/soldier drop, and 1000 does not fit any field (max is 999
+    for the widest, 99 for the common two-digit ones). See docs/lab/probe_gold.py / probe_gold_widths.py.
+    """
+    rep = Report("gold_max")
+    out = bytearray(blob)
+    changed = 0
+    widths: dict[int, int] = {}
+    for m in _GOLD_GIVE_RE.finditer(blob):
+        digits = m.group(2)
+        w = len(digits)
+        maxed = b"9" * w
+        widths[w] = widths.get(w, 0) + 1
+        if maxed != digits:
+            out[m.start(2):m.end(2)] = maxed
+            changed += 1
+    if not widths:
+        rep.notes.append("no gold container pickups found - nothing changed")
+        return blob, rep
+    rep.changed = changed
+    total = sum(widths.values())
+    rep.notes.append(f"{total} gold pickup(s) maxed to their field width "
+                     + ", ".join(f"{c}x{w}-digit->{'9'*w}" for w, c in sorted(widths.items())))
+    rep.notes.append("size-preserving: +Give is fixed width, so 1000+ cannot fit (max 999); gold "
+                     "is a container pickup, NOT a soldier/enemy drop (no such mechanism in the data)")
+    return bytes(out), rep
+
+
 # A container is a block that carries BOTH `+Give:` and `+Messagebox:`. `+Give:` is the AMOUNT
 # (a count, or a gold sum); the thing you actually receive is the `+Messagebox:` string:
 #
@@ -2909,6 +2951,384 @@ def _diff_outside(a: bytes, b: bytes, fields: list[tuple[int, int]]) -> int:
     return n
 
 
+# --------------------------------------------------------------------------- #
+# Boss Gauntlet - chain the boss levels' exit doors into a sequence
+#
+# Idea (user request): instead of hunting bosses across the world, beat one boss area and its exit
+# takes you to the NEXT boss area, through a gauntlet. The bosses stay in their home levels; we
+# rewrite ONE exit door per level to point at the next level in the chain.
+#
+# The boss->level identity is the VPP MEMBER FILENAME (recovered + verified: docs/lab/
+# probe_boss_member.py, probe_gauntlet_feasible2.py). A full 11-level chain is NOT possible - the
+# door-name field must fit the target name (len(new) <= len(old)), several boss levels only own
+# `worldmap1` doors, and `jadetemple` has no doors at all. The LONGEST legal chain (verified by
+# probe_gauntlet_path.py against the retail disc) visits 7 levels / 16 of the 25 bosses:
+#
+#   khosanilab2(Pyrul) -> khosanilab(Giant Salamanka) -> rand-hills01(Phoenix Rider)
+#     -> IonaExt02(Luminar) -> sewerboss(Tentacle Beast x4) -> masad(3 Riders)
+#     -> TempleInt(Tiger Rider, Luminar, Machival, Pyrul, Titus)
+#
+# Each hop rewrites one specific door, identified by its CURRENT destination name + arrival +Index
+# (unique enough on the retail disc), with declare-and-refuse on the exact field bytes. Four hops
+# reuse `worldmap1` overworld doors; those are statically legal (name fits, slot exists, script-
+# safe) but overworld transitions have historically risked a title-screen bounce, so this feature
+# is EXPERIMENTAL and must be play-verified. Not coverable in the chain: jadetemple (0 doors),
+# TempleInt2 / Rand-Forest01 / Rand-Forestnite1 (long names or only worldmap1 doors) - reported.
+#
+# Pair with `boss_rush` (clusters each level's bosses onto one spot) so each stop is one fight.
+#
+# Each hop: (from_level, to_level, current_dest_name, arrival_index). The transform matches a door
+# whose source level (by VPP member, re-derived here) == from_level AND current dest == that name
+# AND +Index == that index, then rewrites the dest field to to_level, size-preserving.
+_BOSS_GAUNTLET_CHAIN = [
+    ("khosanilab2", "khosanilab",   b"KhosaniStrng", 2),
+    ("khosanilab",  "rand-hills01", b"KhosaniStrng", 2),
+    ("rand-hills01", "IonaExt02",   b"worldmap1",    3),
+    ("IonaExt02",   "sewerboss",    b"worldmap1",    4),
+    ("sewerboss",   "masad",        b"LPalaceInt",   1),
+    ("masad",       "TempleInt",    b"worldmap1",    2),
+]
+# bosses not reachable in the chain, for honest reporting
+_BOSS_GAUNTLET_UNCOVERED = {
+    "jadetemple": "4 Riders (level has no doors - cannot chain onward)",
+    "TempleInt2": "Machival/Evil Urath/Evil Joseph (only worldmap1 doors; long name)",
+    "Rand-Forest01": "Serpent Rider (long name / overworld-only doors)",
+    "Rand-Forestnite1": "Ghost Rider (long name / overworld-only doors)",
+}
+
+
+def _member_level_map(blob: bytes):
+    """blob-offset -> level name, from the VPP member directory. The gauntlet needs to know which
+    LEVEL a door sits in, and the only reliable key is the VPP member filename (the 'Level file
+    for' comment is unreliable). The blob is the tight concatenation of member DATA, so we rebuild
+    the member boundaries by re-reading the TOC is impossible from the blob alone - instead the
+    boundaries are recovered from the one in-blob anchor that IS per-member: this function is given
+    the member ranges by the driver via _BOSS_GAUNTLET_RANGES when available, else returns None.
+    """
+    ranges = _BOSS_GAUNTLET_RANGES
+    if not ranges:
+        return None
+    # ranges is a list of (level_name, blob_start, blob_end)
+    return ranges
+
+
+# The driver sets this to [(level_name, blob_start, blob_end), ...] before running the transform,
+# because the blob alone does not carry the member directory. Left None otherwise (the transform
+# then refuses rather than guess).
+_BOSS_GAUNTLET_RANGES = None
+
+
+def set_boss_gauntlet_ranges(ranges):
+    """Driver hook: hand the transform the VPP member->blob-range map (level_name, start, end)."""
+    global _BOSS_GAUNTLET_RANGES
+    _BOSS_GAUNTLET_RANGES = ranges
+
+
+def _gauntlet_level_at(off, ranges):
+    for name, s, e in ranges:
+        if s <= off < e:
+            return name
+    return None
+
+
+def t_boss_gauntlet(blob, rng):
+    """Chain the boss levels' exit doors into a sequence (see the banner above).
+
+    Reuses the door machinery: a door is identified by (source level via VPP member, current
+    destination name, +Index), then its destination field is rewritten to the next chain level.
+    Size-preserving (new name + space pad + closing quote == old field width); declare-and-refuse
+    on the exact field bytes; read back after writing. EXPERIMENTAL: four hops reuse overworld
+    `worldmap1` doors that may bounce to the title in game - play-verify before trusting.
+    """
+    rep = Report("boss_gauntlet")
+    ranges = _member_level_map(blob)
+    if ranges is None:
+        rep.notes.append("REFUSED: boss_gauntlet needs the VPP member map (driver must call "
+                         "set_boss_gauntlet_ranges); nothing changed")
+        return blob, rep
+
+    recs = _door_records(blob)
+    out = bytearray(blob)
+    patches = []            # (off, expect, repl)
+    done = []
+    for frm, to, cur, idx in _BOSS_GAUNTLET_CHAIN:
+        to_b = to.encode("latin-1")
+        match = None
+        for r in recs:
+            if r["name"] != cur:
+                continue
+            if r.get("index") != idx:
+                continue
+            lvl = _gauntlet_level_at(r["off"], ranges)
+            if lvl is None or _door_key(lvl) != _door_key(frm):
+                continue
+            match = r
+            break
+        if match is None:
+            rep.notes.append(f"HOP SKIPPED {frm}->{to}: no door with dest {cur.decode()!r} "
+                             f"idx {idx} found in {frm}")
+            continue
+        old = match["name"]
+        if len(to_b) > len(old):
+            rep.notes.append(f"HOP SKIPPED {frm}->{to}: name too long for field")
+            continue
+        off = match["off"]
+        expect = old + b'"'
+        if bytes(out[off:off + len(expect)]) != expect:
+            rep.notes.append(f"REFUSED: door at 0x{off:X} ({frm}->{to}) does not hold "
+                             f"{expect!r}; nothing written")
+            return blob, rep
+        repl = to_b + b" " * (len(old) - len(to_b)) + b'"'
+        patches.append((off, expect, repl))
+        done.append(f"{frm}->{to}")
+
+    if not patches:
+        rep.notes.append("no gauntlet hops could be applied - nothing changed")
+        return blob, rep
+
+    for off, _expect, repl in patches:
+        out[off:off + len(repl)] = repl
+    bad = [off for off, _e, repl in patches if bytes(out[off:off + len(repl)]) != repl]
+    if bad:
+        rep.notes.append(f"REFUSED: {len(bad)} hop(s) did not read back ({bad[:3]}); nothing written")
+        return blob, rep
+
+    rep.changed = len(patches)
+    rep.notes.append(f"gauntlet chain: {' -> '.join(['khosanilab2'] + [h.split('->')[1] for h in done])}")
+    rep.notes.append(f"{len(patches)}/{len(_BOSS_GAUNTLET_CHAIN)} hops wired, size-preserving, read back OK")
+    rep.notes.append("EXPERIMENTAL: 4 hops reuse overworld worldmap1 doors that may bounce to "
+                     "the title - PLAY-VERIFY before trusting")
+    rep.notes.append("pair with boss_rush so each stop is a single fight")
+    uncov = ", ".join(f"{k} ({v})" for k, v in _BOSS_GAUNTLET_UNCOVERED.items())
+    rep.notes.append(f"bosses NOT in the chain: {uncov}")
+    return bytes(out), rep
+
+
+# --------------------------------------------------------------------------- #
+# Boss Rooms - the WORKING boss gauntlet (NPC->boss swap + door chain)
+#
+# The scripted boss_gauntlet failed because bosses are hidden/trigger-gated: you walked into empty
+# rooms (play-verified). The fix (user's idea): don't rely on the level's own bosses - OVERWRITE a
+# level's NPC placements with hostile BOSS creatures. Hostility comes from the creature DEFINITION
+# ($Team:"hostile" in #Character Info), so a placement whose $Character is renamed to "Ghost Rider"
+# spawns a live, aggressive Rider on arrival - no +Boss, no +Action, no activation gate. This is the
+# same mechanism as enemies_random, just aimed at NPC (peaceful) placements and seeded with bosses.
+# Size-preserving: $Character is rewritten inside its own field width (boss names 5-15 chars fit the
+# wide NPC name slots - verified docs/lab/probe_npc_to_boss.py). Then each level's exit door is
+# rewritten to the next level in the chain (same door machinery as door_destination_remap).
+#
+# Chain starts at masad (the opening level, where the player begins) and runs through host levels
+# that (a) have NPC slots wide enough for bosses and (b) can legally door-link. 32 levels qualify;
+# a long legal chain exists (docs/lab/probe_bossroom_chain.py). We build the chain dynamically from
+# the live data so it adapts, starting at masad.
+#
+# Honest scope: these are boss-type ENEMIES (the creature's stats/model/hostility), not the full
+# scripted boss encounters with intros/stages. That is exactly "drop into a room of fightable
+# bosses", and it is the version that actually works in game.
+_BOSS_ROOM_CREATURES = [
+    b"Ghost Rider", b"Tiger Rider", b"Phoenix Rider", b"Serpent Rider",
+    b"Luminar", b"Pyrul", b"Titus", b"Machival", b"Giant Salamanka",
+    b"Tentacle Beast", b"Evil Urath", b"Evil Joseph",
+]
+
+
+def _boss_room_level_map():
+    """The driver supplies (level_name, blob_start, blob_end) via set_boss_gauntlet_ranges."""
+    return _BOSS_GAUNTLET_RANGES
+
+
+# Pacifier actions: if a placement carries any of these, a creature swapped onto it stays
+# hidden/passive and will NOT aggro. We only overwrite CLEAN placements (none of these).
+_BOSS_ROOM_PACIFIERS = (b"+Hidden", b'"turn hostile"\t0', b'"turn hostile" 0',
+                        b'"wait for go"', b'"show/hide"\t0', b'"show/hide" 0')
+
+# masad (the start level) only loads these hostile creature models, so only these are model-safe to
+# place there (anything else hangs the load). All are $Team:"hostile".
+_MASAD_ENEMIES = [b"Orenian Soldier1", b"Orenian Soldier2", b"Orenian Archer",
+                  b"Orenian Scout", b"Barbarian Fighter"]
+_BOSS_ROOM_START = "masad"
+
+
+def t_boss_rooms(blob, rng, levels=5, per_level=0):
+    """Boss Rooms gauntlet - the WORKING design (see docs/BOSS-ROOMS-DESIGN.md).
+
+    masad (start): clean non-story NPCs become model-safe hostile enemies (Orenian Soldier/Scout/
+    Archer/Barbarian - loaded in masad, so no load hang; aggro because the slots are clean). Its
+    exit chains into the boss rooms.
+    Boss rooms: each level's clean NPC slots become that level's OWN boss (model resident, aggro on
+    arrival). Each exit leads to another boss room (seeded order). TempleInt is terminal.
+
+    Two hard rules enforced: (1) MODEL-SAFE - only place a creature a level already loads; (2) CLEAN
+    SLOTS ONLY - skip placements with +Hidden/"turn hostile 0"/"wait for go"/"show/hide 0", else the
+    creature won't aggro. Size-preserving, declare-and-refuse, read back. EXPERIMENTAL door hops.
+    """
+    rep = Report("boss_rooms")
+    ranges = _boss_room_level_map()
+    if ranges is None:
+        rep.notes.append("REFUSED: boss_rooms needs the VPP member map (driver hook); nothing changed")
+        return blob, rep
+
+    def level_at(off):
+        for name, s, e in ranges:
+            if s <= off < e:
+                return name
+        return None
+
+    keyname = {}
+    for name, s, e in ranges:
+        keyname.setdefault(_door_key(name), name)
+
+    # which bosses each level OWNS (its models are loaded there -> model-safe to place)
+    own_bosses: dict[str, list[bytes]] = {}
+    for s, e in _placement_records(blob):
+        seg = blob[s:e]
+        if b"+Boss" not in seg:
+            continue
+        cm = PLACEMENT_CHAR_RE.search(seg)
+        lv = level_at(s)
+        if cm and lv:
+            own_bosses.setdefault(_door_key(lv), []).append(cm.group(2))
+
+    # clean peaceful placements per level (no pacifier) - the only safe aggro slots
+    _m, peaceful = _analyse_enemies(blob)
+    clean_by_level: dict[str, list] = {}
+    for rec in peaceful:
+        seg = blob[rec["start"]:rec["end"]]
+        if any(p in seg for p in _BOSS_ROOM_PACIFIERS):
+            continue
+        lv = level_at(rec["start"])
+        if lv:
+            clean_by_level.setdefault(_door_key(lv), []).append(rec)
+
+    # door legality (same rules as door_destination_remap)
+    slots = _level_start_slots(blob)
+    safe = _no_script_safe_targets(blob)
+    recs = _door_records(blob)
+    doors_by_level: dict[str, list] = {}
+    for r in recs:
+        lv = level_at(r["off"])
+        if lv:
+            doors_by_level.setdefault(_door_key(lv), []).append(r)
+
+    def legal_door(frm_key, to_name):
+        for d in doors_by_level.get(frm_key, []):
+            dn = d["name"].decode("latin-1")
+            if len(to_name) > len(dn):
+                continue
+            if d["index"] is not None and d["index"] not in slots.get(_door_key(to_name), set()):
+                continue
+            if not d["has_script"] and _door_key(to_name) not in safe:
+                continue
+            return d
+        return None
+
+    # a level is a usable BOSS ROOM if it owns a boss that fits at least one of its clean slots
+    def room_fill(key):
+        bosses = own_bosses.get(key, [])
+        if not bosses:
+            return []
+        picks = []
+        for rec in sorted(clean_by_level.get(key, []), key=lambda r: -len(r["char"])):
+            w = len(rec["char"])
+            fit = [b for b in bosses if len(b) == w]   # EQUAL-LENGTH ONLY (no padding; see 1a)
+            if fit:
+                picks.append((rec, fit))
+        return picks
+
+    boss_rooms = [k for k in own_bosses if room_fill(k) and k != _door_key(_BOSS_ROOM_START)]
+
+    start = _door_key(_BOSS_ROOM_START)
+    if start not in clean_by_level:
+        rep.notes.append("REFUSED: masad has no clean NPC slots; nothing changed")
+        return blob, rep
+
+    # build the chain: masad -> boss rooms, each hop a legal door, seeded order among rooms
+    chain = [start]
+    remaining = boss_rooms[:]
+    rng.shuffle(remaining)
+    cur = start
+    while len(chain) < max(2, int(levels)) and remaining:
+        nxt = next((r for r in remaining if legal_door(cur, keyname[r])), None)
+        if nxt is None:
+            break
+        chain.append(nxt)
+        remaining.remove(nxt)
+        cur = nxt
+    if len(chain) < 2:
+        rep.notes.append("REFUSED: could not chain masad to any boss room; nothing changed")
+        return blob, rep
+
+    out = bytearray(blob)
+    npc_edits = 0
+
+    # 1a) masad: fill clean non-story NPC slots with model-safe hostile enemies.
+    # EQUAL-LENGTH ONLY - $Character must NOT be space-padded (padding corrupts the record: the
+    # engine reads past the name and dereferences script text -> TLB-miss freeze, observed in game.
+    # Verified: of 1102 $Character names in retail, zero are pad-padded). So a slot is only usable
+    # if a masad-loaded hostile exists at EXACTLY its name width.
+    masad_filled = 0
+    for rec in sorted(clean_by_level.get(start, []), key=lambda r: -len(r["char"])):
+        w = len(rec["char"])
+        fits = [c for c in _MASAD_ENEMIES if len(c) == w]
+        if not fits:
+            continue
+        new = fits[rng.randrange(len(fits))]
+        a, b = rec["char_abs"]
+        if bytes(out[a:b]) != rec["char"]:
+            continue
+        out[a:b] = new                      # exact width, no padding
+        npc_edits += 1
+        masad_filled += 1
+
+    # 1b) each boss room: fill EVERY clean slot with that room's OWN boss(es) (model-safe, aggro).
+    # per_level=0 (default) means fill them all - as many bosses as the room has clean slots.
+    room_fills = {}
+    cap = int(per_level) if int(per_level) > 0 else None
+    for key in chain[1:]:
+        picks = room_fill(key)
+        n = 0
+        for rec, fit in picks:
+            if cap is not None and n >= cap:
+                break
+            new = fit[rng.randrange(len(fit))]   # fit entries are exactly len(rec["char"])
+            a, b = rec["char_abs"]
+            if bytes(out[a:b]) != rec["char"]:
+                continue
+            out[a:b] = new                       # exact width, no padding
+            npc_edits += 1
+            n += 1
+        room_fills[key] = n
+
+    # 2) chain the exits
+    door_edits = 0
+    hop_notes = []
+    for i in range(len(chain) - 1):
+        frm, to = chain[i], chain[i + 1]
+        to_name = keyname[to]
+        d = legal_door(frm, to_name)
+        if not d:
+            continue
+        old = d["name"]
+        off = d["off"]
+        expect = old + b'"'
+        if bytes(out[off:off + len(expect)]) != expect:
+            continue
+        out[off:off + len(expect)] = to_name.encode("latin-1") + b" " * (len(old) - len(to_name)) + b'"'
+        door_edits += 1
+        hop_notes.append(f"{keyname[frm]}->{to_name}")
+
+    rep.changed = npc_edits + door_edits
+    rep.notes.append("chain: " + " -> ".join(keyname[k] for k in chain))
+    rep.notes.append(f"masad start: {masad_filled} non-story NPCs -> model-safe hostile enemies "
+                     f"(Orenian Soldier/Scout/Archer/Barbarian), aggro on arrival")
+    rep.notes.append("boss rooms: " + ", ".join(f"{keyname[k]}={room_fills.get(k,0)} boss(es)"
+                                                 for k in chain[1:]))
+    rep.notes.append(f"{door_edits} exit door(s) chained: {', '.join(hop_notes)}")
+    rep.notes.append("MODEL-SAFE (only creatures the level loads) + CLEAN SLOTS only (so they aggro)")
+    rep.notes.append("EXPERIMENTAL: door hops may reuse overworld doors; play-verify")
+    return bytes(out), rep
+
+
 DOOR_SCOPE_VALUES = ("interior", "overworld", "all")
 
 
@@ -3178,9 +3598,23 @@ OPTION_AWARE = {"ring_hunt", "xp_scale", "levelcap_set", "permadeath", "enemy_di
                 "door_destination_remap", "chest_items",
                 "weapon_attack_max", "armor_protect_max", "enemy_xp_random",
                 "enemy_xp_set", "enemy_damage_set", "rooms_shuffle",
-                "boss_rush", "item_hunt"}
+                "boss_rush", "boss_rooms", "item_hunt"}
 
 OPTIONS = {
+    "boss_rooms": {
+        "levels": {
+            "type": "int", "default": 4, "min": 2, "max": 12,
+            "label": "How many boss rooms to chain",
+            "help": "Length of the gauntlet: how many levels (starting at the opening) get their "
+                    "NPCs replaced with bosses and chained exit-to-exit.",
+        },
+        "per_level": {
+            "type": "int", "default": 0, "min": 0, "max": 60,
+            "label": "Bosses per room (0 = fill every slot)",
+            "help": "How many of each boss room's clean NPC slots become bosses. 0 (default) fills "
+                    "EVERY clean slot - as many bosses as the room holds.",
+        },
+    },
     "boss_rush": {
         "arena": {
             "type": "str", "default": "auto",
@@ -3535,6 +3969,13 @@ TRANSFORM_INFO = {
         "Shuffles +Give payouts among equal widths. Most single digits are item "
         "counts, so only the multi-digit gold payouts really move.",
     ),
+    "gold_max": (
+        "Max gold pickups",
+        "Sets every gold container pickup to the biggest value its fixed-width field allows "
+        "(e.g. 30->99, 500->999). Honest limits: gold is a container pickup, not an enemy/soldier "
+        "drop (the data has no enemy->gold mechanism), and 1000 cannot fit any field without "
+        "resizing (max is 999). Size-preserving.",
+    ),
     "chest_items": (
         "Chest contents",
         "Shuffles WHAT a container yields — the +Messagebox: name in a block that also "
@@ -3567,6 +4008,24 @@ TRANSFORM_INFO = {
         "differently while every anchor still exists in that level. Doors, quests, the "
         "level graph and the navpoint definitions are never touched, so nothing can become "
         "unreachable. Size-preserving.",
+    ),
+    "boss_rooms": (
+        "Boss Rooms (gauntlet)",
+        "The working boss gauntlet: fills chained levels' NPC slots with hostile boss creatures "
+        "(live on arrival - hostility is intrinsic to the creature, so no scripted activation is "
+        "needed), and chains each level's exit to the next, starting at the opening level. Walk in, "
+        "fight a room of bosses, exit to the next room. Size-preserving. These are boss-type "
+        "enemies, not the full scripted boss intros. EXPERIMENTAL: some door hops may reuse "
+        "overworld doors; play-verify.",
+    ),
+    "boss_gauntlet": (
+        "Boss Gauntlet",
+        "Chains boss levels' exit doors into a sequence: clear one boss area and its exit sends "
+        "you to the next, through 7 levels / 16 of the 25 bosses (khosanilab2 -> khosanilab -> "
+        "rand-hills01 -> IonaExt02 -> sewerboss -> masad -> TempleInt). Size-preserving, "
+        "declare-and-refuse. EXPERIMENTAL: four hops reuse overworld doors that may bounce to the "
+        "title; play-verify. Pair with Boss Rush so each stop is one fight. A full 11-level chain "
+        "is impossible (name-field widths, levels with no usable doors).",
     ),
     "boss_rush": (
         "Boss Rush",
@@ -3748,6 +4207,7 @@ TRANSFORMS = {
     "shop_shuffle": t_shop_shuffle,
     "chest_shuffle": t_chest_shuffle,
     "chest_items": t_chest_items,
+    "gold_max": t_gold_max,
     "dialogue_shuffle": t_dialogue_shuffle,
     "fade_instant": t_fade_instant,
     "dialogue_blank": t_dialogue_blank,
@@ -3771,6 +4231,8 @@ TRANSFORMS = {
     "door_destination_remap": t_door_destination_remap,
     "rooms_shuffle": t_rooms_shuffle,
     "boss_rush": t_boss_rush,
+    "boss_gauntlet": t_boss_gauntlet,
+    "boss_rooms": t_boss_rooms,
     "item_hunt": t_item_hunt,
 }
 
@@ -4017,6 +4479,29 @@ MODES = {
         "transforms": ["boss_rush"],
         "options": {"boss_rush": {"arena": "auto"}},
         "risk": "medium — bosses change position within their level; untested in game",
+    },
+    "boss_rooms": {
+        "label": "Boss Rooms",
+        "blurb": "The working boss gauntlet: starting at the opening level, each room's NPCs are "
+                 "replaced with hostile bosses (live on arrival - no activation needed), and the "
+                 "exit chains you to the next boss room. Walk in, fight the bosses, move on. "
+                 "Tutorials off and everything dies in one hit for a fast run.",
+        "transforms": ["boss_rooms", "enemy_hp_set", "enemy_drops_random"],
+        "options": {"boss_rooms": {"levels": 4, "per_level": 6}, "enemy_hp_set": {"value": 1}},
+        "binary": [["skip_intro", {}], ["skip_tutorial", {}]],
+        "risk": "high - experimental door chain; overworld hops may bounce, play-verify",
+    },
+    "boss_gauntlet": {
+        "label": "Boss Gauntlet",
+        "blurb": "A gauntlet: clear one boss area and its exit sends you to the next, through 7 "
+                 "levels and 16 of the 25 bosses. Bosses are also clustered in each area (boss_rush) "
+                 "so every stop is one fight. EXPERIMENTAL - four hops reuse overworld doors that "
+                 "may bounce to the title; needs play-testing. A full 11-level chain is impossible "
+                 "(door name-field widths; some boss levels have no usable door).",
+        "transforms": ["boss_gauntlet", "boss_rush"],
+        "options": {"boss_rush": {"arena": "auto"}},
+        "binary": [["skip_tutorial", {}]],
+        "risk": "high - experimental door chain; overworld hops may bounce, play-verify",
     },
     "item_hunt": {
         "label": "Item Hunt",
@@ -4286,8 +4771,30 @@ def _load_tables(src: Path, say, use_cache: bool = True):
         return base, v.count, blob, list(v.ranges())
 
 
+def _blob_member_ranges(ranges):
+    """Convert VPP (iso_offset, size, member_name) ranges into (level_name, blob_start, blob_end).
+
+    The blob is the tight concatenation of member DATA in member order, so blob offsets are the
+    running sum of sizes. The level name is the member filename with _script.tbl/.tbl and a _vN
+    suffix stripped (the door-usable level name; see docs/lab/probe_boss_member.py). This is the
+    reliable member->level key the boss_gauntlet transform needs.
+    """
+    out = []
+    pos = 0
+    for _iso_off, size, name in ranges:
+        lvl = name
+        for suf in ("_script.tbl", ".tbl"):
+            if lvl.lower().endswith(suf):
+                lvl = lvl[: -len(suf)]
+                break
+        lvl = re.sub(r"_v\d+$", "", lvl)
+        out.append((lvl, pos, pos + size))
+        pos += size
+    return out
+
+
 def _apply_transforms(blob: bytes, seed: str, transforms, say,
-                      options: dict | None = None) -> tuple[bytes, list[dict]]:
+                      options: dict | None = None, ranges=None) -> tuple[bytes, list[dict]]:
     """Run the transform chain in order. Every step is length-checked.
 
     Determinism: one Random(seed) fed to the transforms in list order, so the
@@ -4296,7 +4803,11 @@ def _apply_transforms(blob: bytes, seed: str, transforms, say,
     Options are per-transform keyword arguments, e.g.
         {"ring_hunt": {"anchor": "act3_finished", "count": 2}}
     Only transforms listed in OPTION_AWARE receive them.
+
+    `ranges` (VPP member ranges) is used to give boss_gauntlet the member->level map, which the
+    blob alone does not carry.
     """
+    set_boss_gauntlet_ranges(_blob_member_ranges(ranges) if ranges else None)
     rng = Random(seed)
     options = options or {}
     reports: list[dict] = []
@@ -4344,7 +4855,7 @@ def dry_run_iso(src: Path, seed: str, transforms: list[str], progress=None,
     say("dry run: reading TABLES.VPP only, no output written")
     base, entries, blob, ranges = _load_tables(src, say)
     order = list(transforms)
-    new_blob, reports = _apply_transforms(blob, seed, order, say, options)
+    new_blob, reports = _apply_transforms(blob, seed, order, say, options, ranges=ranges)
 
     # per-transform impact measured on its own, against the untouched blob
     for rep in reports:
@@ -4426,7 +4937,7 @@ def randomize_iso(src: Path, dst: Path, seed: str, transforms: list[str],
     dst.parent.mkdir(parents=True, exist_ok=True)
 
     base, entries, blob, ranges = _load_tables(src, say)
-    blob, reports = _apply_transforms(blob, seed, list(transforms), say, options)
+    blob, reports = _apply_transforms(blob, seed, list(transforms), say, options, ranges=ranges)
 
     say("copying image")
     shutil.copyfile(src, dst)
