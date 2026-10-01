@@ -2909,7 +2909,10 @@ def _diff_outside(a: bytes, b: bytes, fields: list[tuple[int, int]]) -> int:
     return n
 
 
-def t_door_destination_remap(blob, rng, how="shuffle", require_script=False):
+DOOR_SCOPE_VALUES = ("interior", "overworld", "all")
+
+
+def t_door_destination_remap(blob, rng, how="shuffle", require_script=False, scope="interior"):
     """Rewrite where every door leads. The headline feature.
 
     All 218 doors are eligible. The "Exit to Unknown" trap - a door with no explicit `+Script:`
@@ -2941,6 +2944,13 @@ def t_door_destination_remap(blob, rng, how="shuffle", require_script=False):
         so no destination is invented and none disappears. The gentler policy.
       * ``off`` - change nothing and say so.
 
+    `scope` - which transitions are eligible:
+      * ``interior`` (default) - only the non-overworld doors. The safe, play-verified set;
+        the opening-area/overworld-hub transitions are held (they bounce to the title in game).
+      * ``overworld`` - ONLY the overworld/opening transitions. EXPERIMENTAL, not play-verified;
+        these can bounce to the title.
+      * ``all`` - every door, holding nothing. EXPERIMENTAL, same overworld bounce risk.
+
     Risk this carries and does not hide: it changes the level graph itself. Reachability is
     NOT checked, so a seed can strand the player. That guard is a separate work item.
     """
@@ -2950,27 +2960,47 @@ def t_door_destination_remap(blob, rng, how="shuffle", require_script=False):
         rep.notes.append(f"unknown how {how!r} - pick one of {list(DOOR_HOW_VALUES)}; "
                          f"nothing changed")
         return blob, rep
+    scope = str(scope)
+    if scope not in DOOR_SCOPE_VALUES:
+        rep.notes.append(f"unknown scope {scope!r} - pick one of {list(DOOR_SCOPE_VALUES)}; "
+                         f"nothing changed")
+        return blob, rep
 
     recs = _door_records(blob)
     if not recs:
         rep.notes.append("no `+Id: \"load level\"` doors found in this stream - nothing changed")
         return blob, rep
 
-    # Hold the opening-area / overworld-hub doors: their loads pass every static check but still
-    # bounce to the title in game, and they are the first transitions a run hits.
-    src_held = 0
-    kept = []
-    for r in recs:
+    # `scope` selects WHICH transitions are eligible, split on the opening-area/overworld-hub
+    # doors (DOOR_SOURCE_EXCLUDE). Those loads pass every static check but bounce to the title in
+    # game and are the first transitions a run hits, so they are held by default:
+    #   interior  (default) - remap only the NON-overworld doors (the safe, proven set)
+    #   overworld           - remap ONLY the held overworld/opening transitions (experimental)
+    #   all                 - remap everything, hold nothing (experimental; can bounce to title)
+    def _is_overworld(r) -> bool:
         srck = _door_key(r.get("src") or "")
-        if any(srck == _door_key(x) or srck.startswith(_door_key(x)) for x in DOOR_SOURCE_EXCLUDE):
-            src_held += 1
-        else:
-            kept.append(r)
-    recs = kept
-    rep.notes.append(f"{len(recs)} door(s) eligible ({src_held} held: opening-area/overworld "
-                     f"sources are not remapped - they bounce to the title even when valid)")
+        return any(srck == _door_key(x) or srck.startswith(_door_key(x))
+                   for x in DOOR_SOURCE_EXCLUDE)
+
+    total = len(recs)
+    if scope == "interior":
+        recs = [r for r in recs if not _is_overworld(r)]
+        held = total - len(recs)
+        rep.notes.append(f"scope=interior: {len(recs)} interior door(s) eligible ({held} "
+                         f"overworld/opening transitions held - they bounce to the title even "
+                         f"when valid)")
+    elif scope == "overworld":
+        recs = [r for r in recs if _is_overworld(r)]
+        held = total - len(recs)
+        rep.notes.append(f"scope=overworld (EXPERIMENTAL): {len(recs)} overworld/opening "
+                         f"transition(s) eligible ({held} interior doors held). These can bounce "
+                         f"to the title in game - not play-verified.")
+    else:  # all
+        rep.notes.append(f"scope=all (EXPERIMENTAL): all {len(recs)} door(s) eligible, including "
+                         f"overworld/opening transitions - these can bounce to the title in game, "
+                         f"not play-verified.")
     if not recs:
-        rep.notes.append("all doors were in held source levels - nothing changed")
+        rep.notes.append("no doors in the selected scope - nothing changed")
         return blob, rep
 
     # The +Script: safe-target set (levels a no-script door may point at without the
@@ -3377,6 +3407,16 @@ OPTIONS = {
             "help": "Off (default): remap ALL doors; no-script doors are constrained to levels "
                     "whose script matches their name, so none can bounce to 'Exit to Unknown'. "
                     "On: stricter - only remap doors that carry an explicit +Script:.",
+        },
+        "scope": {
+            "type": "choice", "default": "interior",
+            "choices": list(DOOR_SCOPE_VALUES),
+            "label": "Which transitions to randomize",
+            "help": "interior (default, play-verified) = randomize only the regular in-level "
+                    "doors; the overworld/opening map transitions are left alone because they "
+                    "bounce to the title screen when remapped. overworld = randomize ONLY those "
+                    "overworld/opening transitions (experimental, can bounce to title). all = "
+                    "randomize every transition, holding nothing (experimental, same risk).",
         },
     },
 }

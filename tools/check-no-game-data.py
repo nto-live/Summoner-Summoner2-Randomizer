@@ -94,7 +94,11 @@ def main() -> int:
             problems.append(f"{rel}: forbidden file type {suffix}")
             continue
         size = p.stat().st_size
-        if size > BIG_FILE_BYTES:
+        # The size heuristic exists to catch binary blobs (extracted game material). A large file
+        # whose extension is a known text/source type is NOT a blob - it still gets the content
+        # scan below. rando_core.py in particular is a single hand-written transform engine that
+        # has legitimately grown past 200 KB. So only flag oversize files that are NOT text/source.
+        if size > BIG_FILE_BYTES and suffix not in TEXT_EXT:
             problems.append(f"{rel}: {size:,} bytes - too big for source; is this a generated file?")
         if suffix not in TEXT_EXT:
             continue
