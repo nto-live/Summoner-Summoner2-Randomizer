@@ -116,9 +116,17 @@ test-roguelike.iso   15,235 edits    CRC 13E2774E   BIOS loaded, boot ELF execut
 byte-identical. The unchanged CRC is the point — the executable was never touched. The mechanism,
 the patch format and the honest limits are in **`DOOR-REMAP.md`**.
 
-**But booting is not playing.** No mode has been watched through a cutscene, a door, or the
+**But booting is not playing.** Most modes have not been watched through a cutscene, a door, or the
 Forge opening — and a door remap in particular is unproven until something is seen coming out
 the other side. Treat the pacing and progression transforms as promising, not proven.
+
+The desktop app reflects this honestly: modes are split into a **Tested** tab (play-verified) and
+an **Experimental (untested)** tab, with a **Summoner 2 — TBD** marker for the not-yet-supported
+second game. Only two modes are in the Tested tab so far.
+
+> **Help wanted — play-testing.** If you have the disc and an emulator, you can move modes from
+> Experimental to Tested. What's verified, what needs testing, and how to report a result is in
+> **`docs/TESTING-HELP-WANTED.md`**. A clean "played it start to finish" is as valuable as a bug.
 
 ---
 

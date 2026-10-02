@@ -55,6 +55,13 @@ public sealed class ModeInfo
     /// </summary>
     public bool Buildable { get; init; } = true;
 
+    /// <summary>
+    /// True for a mode that has been PLAY-verified in game (not merely boot-verified). Default is
+    /// false - the honest default per the project rule "boot-verified is not play-verified".
+    /// Absent in the payload means untested. The UI groups tested modes into their own tab.
+    /// </summary>
+    public bool Tested { get; init; } = false;
+
     public string Display => (Label.Length > 0 ? Label : Key)
         + (Buildable ? "" : "  (reference only)");
 }
@@ -144,6 +151,8 @@ public sealed class ListPayload
                     HasBinary = hasBinary,
                     Buildable = m.Prop("buildable") is not JsonElement bp
                                 || bp.ValueKind != JsonValueKind.False,
+                    Tested = m.Prop("tested") is JsonElement tp
+                             && tp.ValueKind == JsonValueKind.True,
                 });
             }
         }

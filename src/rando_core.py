@@ -4269,6 +4269,26 @@ MODES = {
         "transforms": [],
         "binary": [["skip_tutorial", {}]],
         "risk": "low - no randomisation; the only change is the tutorial patch",
+        "tested": True,
+    },
+    # The play-verified gameplay recipe (the "CHAOS" build Joshua played end-to-end): tutorials
+    # off, enemies randomized within their own area, everything dies in one hit, loot drops and
+    # gold maxed, XP boosted. This is the one combination confirmed to boot, move, and progress
+    # past the opening in game. Marked TESTED.
+    "tested_chaos": {
+        "label": "Tested \u00b7 No Tutorial + 1HP + Random Loot",
+        "blurb": "The play-verified recipe: tutorials off, enemies randomized (same-area), every "
+                 "enemy dies in one hit, random drops and maxed gold, boosted XP. Confirmed in "
+                 "game to boot, move, and progress past the opening. At the burning village, talk "
+                 "to the first NPC a couple of times for the fire to drop (a known, non-blocking "
+                 "quirk of the tutorial-skip).",
+        "transforms": ["enemies_random", "enemy_hp_set", "enemy_drops_random", "gold_max",
+                       "xp_scale"],
+        "options": {"enemies_random": {"scope": "per_level"}, "enemy_hp_set": {"value": 1},
+                    "xp_scale": {"percent": 200}},
+        "binary": [["skip_intro", {}], ["skip_tutorial", {}]],
+        "risk": "play-verified (CHAOS2 seed); the one combination tested end-to-end in game",
+        "tested": True,
     },
     "doors": {
         "label": "Door Shuffle",
@@ -4470,38 +4490,41 @@ MODES = {
         "risk": "medium — quest NPCs can be re-cast or relocated; quests may not complete",
     },
     "boss_rush": {
-        "label": "Boss Rush",
-        "blurb": "The bosses stand together: every level's boss placements are gathered onto a "
-                 "single navpoint of that level, so a boss fights with the others instead of "
-                 "alone. The one-global-arena version is documented as blocked - a navpoint name "
-                 "resolves only inside the level that declares it (names repeat across up to 107 "
-                 "levels), so moving placements BETWEEN levels needs extra bytes.",
+        "label": "Boss Rush (BLOCKED)",
+        "blurb": "BLOCKED - not achievable in the data. A boss-rush (rooms of fightable bosses, "
+                 "chained exit-to-exit) was exhaustively attempted and play-tested; every approach "
+                 "crashes or shows empty rooms. Bosses are hidden/scripted set-pieces, NOT "
+                 "placement-registered enemies, so they cannot be placed as live foes (the engine "
+                 "name-lookup faults); the levels that own them have no disposable NPCs; cross-level "
+                 "door chaining into mid-story levels renders black. Full analysis + "
+                 "instruction-level crash proof: docs/BOSS-RUSH-INVESTIGATION.md.",
         "transforms": ["boss_rush"],
         "options": {"boss_rush": {"arena": "auto"}},
-        "risk": "medium — bosses change position within their level; untested in game",
+        "risk": "BLOCKED - see docs/BOSS-RUSH-INVESTIGATION.md",
+        "buildable": False,
     },
     "boss_rooms": {
-        "label": "Boss Rooms",
-        "blurb": "The working boss gauntlet: starting at the opening level, each room's NPCs are "
-                 "replaced with hostile bosses (live on arrival - no activation needed), and the "
-                 "exit chains you to the next boss room. Walk in, fight the bosses, move on. "
-                 "Tutorials off and everything dies in one hit for a fast run.",
+        "label": "Boss Rooms (BLOCKED)",
+        "blurb": "BLOCKED - the NPC->boss swap crashes in game. Placing a boss on a normal NPC slot "
+                 "faults the engine name-lookup (bosses aren't placement-registered), padding names "
+                 "corrupts the record, and the boss levels' NPCs are all scene-critical. "
+                 "See docs/BOSS-RUSH-INVESTIGATION.md.",
         "transforms": ["boss_rooms", "enemy_hp_set", "enemy_drops_random"],
         "options": {"boss_rooms": {"levels": 4, "per_level": 6}, "enemy_hp_set": {"value": 1}},
         "binary": [["skip_intro", {}], ["skip_tutorial", {}]],
-        "risk": "high - experimental door chain; overworld hops may bounce, play-verify",
+        "risk": "BLOCKED - see docs/BOSS-RUSH-INVESTIGATION.md",
+        "buildable": False,
     },
     "boss_gauntlet": {
-        "label": "Boss Gauntlet",
-        "blurb": "A gauntlet: clear one boss area and its exit sends you to the next, through 7 "
-                 "levels and 16 of the 25 bosses. Bosses are also clustered in each area (boss_rush) "
-                 "so every stop is one fight. EXPERIMENTAL - four hops reuse overworld doors that "
-                 "may bounce to the title; needs play-testing. A full 11-level chain is impossible "
-                 "(door name-field widths; some boss levels have no usable door).",
+        "label": "Boss Gauntlet (BLOCKED)",
+        "blurb": "BLOCKED - chaining the boss levels drops you into EMPTY rooms: the bosses are "
+                 "hidden/trigger-gated and never activate out of sequence, and some hops bounce to "
+                 "the title or render black. See docs/BOSS-RUSH-INVESTIGATION.md.",
         "transforms": ["boss_gauntlet", "boss_rush"],
         "options": {"boss_rush": {"arena": "auto"}},
         "binary": [["skip_tutorial", {}]],
-        "risk": "high - experimental door chain; overworld hops may bounce, play-verify",
+        "risk": "BLOCKED - see docs/BOSS-RUSH-INVESTIGATION.md",
+        "buildable": False,
     },
     "item_hunt": {
         "label": "Item Hunt",
@@ -4604,15 +4627,17 @@ MODES = {
 
     # ---- genre modes ----
     "roguelike": {
-        "label": "Roguelike",
-        "blurb": "High variance plus resource pressure: creatures, spawns, loot, "
+        "label": "Roguelike (BLOCKED)",
+        "blurb": "BLOCKED. High variance plus resource pressure: creatures, spawns, loot, "
                  "shops and chests all scrambled, XP cut so you cannot out-level the "
-                 "content, and prices driven up. Every seed plays as a run.",
+                 "content, and prices driven up. Not offered as a build target "
+                 "(stacks eleven unverified changes; marked blocked pending validation).",
         "transforms": ["creature_stats_shuffle", "spawn_shuffle", "item_scatter",
                        "shop_shuffle", "chest_shuffle", "dialogue_shuffle",
                        "sound_shuffle", "music_shuffle", "levelcap_raise",
                        "xp_nerf", "economy_squeeze", "icon_shuffle"],
-        "risk": "high — stacks eleven changes, untested in game",
+        "risk": "BLOCKED",
+        "buildable": False,
     },
     "roguelike_short": {
         "label": "Roguelike · Short",

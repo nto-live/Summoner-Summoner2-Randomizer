@@ -105,3 +105,25 @@ Python in `src/` (`cli.py` front door, `rando_core.py` transforms, `binary.py` E
 `docs/TODO.md` — prioritised, every wanted feature with status and next step. `docs/PLANNED.md` §3 —
 the BLOCKED table with reasons. Joshua tests in game by hand; hand him ISO path + seed + invocation +
 what-correct-looks-like + honest verification label.
+
+## Update 2026-09-30 — boss rush BLOCKED, two new transforms, Tested/Experimental UI
+
+- **Boss rush / gauntlet is BLOCKED (proven, do not re-chase).** Full write-up:
+  `docs/BOSS-RUSH-INVESTIGATION.md`. The wall: bosses are hidden/scripted set-pieces, NOT
+  placement-registered, so placing them as live enemies faults the engine name-lookup (TLB miss
+  reading `0x72616863` = "char" — a $Character string used as a pointer); boss levels' NPCs are all
+  scene-critical (overwriting/unlinking freezes the scene script); cross-level remapped doors render
+  mid-story levels black. Modes `boss_rush` / `boss_rooms` / `boss_gauntlet` are `buildable:False`.
+- **Hard rules (now proven in game):** (1) `$Character`/door-dest swaps EQUAL-LENGTH only — space
+  padding corrupts the record → "char" TLB freeze. (2) only place creatures the level loads as an
+  active `+Monster` (hidden/`+Boss` crash; unloaded models → black/hang). (3) never overwrite/unlink
+  scene-critical NPCs (name referenced elsewhere). (4) `endgame` is not a door target (no start
+  slot); mid-story levels (sewerboss) render black via remapped doors.
+- **New working transforms:** `gold_max` (gold containers → field max 999/99/9; gold is
+  container-only, enemies can't drop gold), and `door_destination_remap` now has a `scope` option
+  (`interior` default / `overworld` / `all`). Boss→level map = VPP member filename (TABLES.VPP TOC
+  via `VppFile`), not inline text.
+- **UI honesty:** modes carry a `tested` bool (default False). Desktop groups modes into **Tested**
+  (play-verified: `vanilla_no_tutorial`, `tested_chaos`) vs **Experimental (untested)** tabs, plus a
+  disabled **Summoner 2 — TBD** tab. `docs/TESTING-HELP-WANTED.md` is the play-testing ask.
+- **Roguelike** mode is also `buildable:False` (eleven unverified changes).

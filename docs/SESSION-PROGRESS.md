@@ -157,3 +157,71 @@ the fire to drop — not a soft-lock."
   until `part2b`), but it's playable as-is — deferred, documented.
 - Selective boot-movie skip (skip some `.pss` logos but not others) was discussed; needs the user to
   confirm the on-screen movie order before targeting individual call sites. Not started.
+
+---
+
+# Session progress — 2026-09-30
+
+The boss-rush / gauntlet investigation, two new transforms, and an honest Tested/Experimental UI.
+
+## Headline
+
+Spent the session trying to build a **boss rush / gauntlet** (walk into rooms of fightable bosses,
+chained exit-to-exit). After many play-tests it is **proven not achievable** in the data and is
+marked BLOCKED with an instruction-level write-up. Along the way, shipped two real features
+(`gold_max`, door-remap `scope`), recovered the boss→level mapping, and reworked the desktop UI to
+split modes into **Tested** vs **Experimental (untested)** tabs with a **Summoner 2 — TBD** marker.
+
+## Shipped and working (verified)
+
+| Thing | What | Verified |
+|---|---|---|
+| `gold_max` transform | maxes every gold CONTAINER pickup (`+Give N`+`Messagebox "Gold"`) to its field width (999/99/9). Gold is container-only; enemies cannot drop gold; 1000 doesn't fit. | 17 pickups, dry-run verified |
+| `door_destination_remap` `scope` option | `interior` (default/safe) / `overworld` / `all` — randomize transitions by group | verified across the 3 scopes |
+| `tested_chaos` mode | the play-verified recipe: no tutorial + 1HP + random loot + maxed gold + boosted XP | play-verified (CHAOS2) |
+| recovered boss→level map | each boss's level = its VPP member filename (TABLES.VPP TOC), not inline text | verified (`probe_boss_member.py`) |
+| guard fix | `check-no-game-data.py` no longer false-flags large text/source files | guard clean |
+
+## BLOCKED this session (marked `buildable: False` in the UI)
+
+- **Boss Rush / Boss Rooms / Boss Gauntlet** — a boss-rush is not achievable: bosses are
+  hidden/scripted set-pieces, NOT placement-registered enemies, so placing them faults the engine
+  name-lookup (`0x72616863` "char" TLB crash); the levels that own them have only scene-critical
+  NPCs; cross-level remapped doors render mid-story levels black. Full proof:
+  `docs/BOSS-RUSH-INVESTIGATION.md` + `docs/BOSS-ROOMS-DESIGN.md`.
+- **Roguelike** — stacks eleven unverified changes; blocked pending validation.
+
+## The hard rules learned (do NOT relearn — see BOSS-RUSH-INVESTIGATION.md)
+
+1. `$Character` / door-dest swaps are EQUAL-LENGTH only. Space-padding corrupts the record →
+   `0x72616863` ("char") TLB freeze.
+2. Only place a creature the level ALREADY loads as an active `+Monster` placement. Hidden/`+Boss`
+   creatures aren't placement-registered → crash; unloaded models → black screen / load hang.
+3. Don't overwrite or unlink scene-critical NPCs (name referenced elsewhere) → script freeze.
+4. Remapped-door chaining renders fine for self-initializing levels; mid-story levels (sewerboss)
+   render black; `endgame` is not a door target (no start slot).
+5. Gold is container-only (max 999); enemies cannot drop gold. `+Drop` is item+chance, no quantity.
+
+## UI change — honesty about what's tested
+
+- New `tested` flag on modes (`rando_core.py`), surfaced through `cli.py --list`, read by
+  `Models.cs` (`ModeInfo.Tested`).
+- Desktop (`MainForm.cs`): the mode dropdown is now under a **TabControl** —
+  **Tested** (play-verified: `vanilla_no_tutorial`, `tested_chaos`), **Experimental (untested)**
+  (everything else; builds but not play-verified), and a disabled **Summoner 2 — TBD** tab.
+- `docs/TESTING-HELP-WANTED.md` added (+ README pointer): what's verified, what needs testing, what's
+  blocked, Summoner-2 TBD, and how to report a play-test result.
+
+## Verification
+
+cli `--list` emits `tested: [vanilla_no_tutorial, tested_chaos]`; desktop C# builds 0 errors/0
+warnings; game-data guard clean (240 tracked files).
+
+## Open / next
+
+- Move Experimental modes to Tested as play-tests come back (`TESTING-HELP-WANTED.md` is the ask).
+- Open leads from the boss work: a masad enemy-arena (swap non-story NPCs → active masad hostiles —
+  needs the "which placements actually spawn" question answered) and a high-level-item-drop
+  transform (143 enemy `+Drop` records; force chance 100 + equal-length high-tier swap). Both
+  documented in `BOSS-RUSH-INVESTIGATION.md`.
+- Summoner 2 (SLUS-20448): not started; UI marker is a placeholder only.

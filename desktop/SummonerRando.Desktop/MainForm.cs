@@ -55,6 +55,10 @@ public sealed class MainForm : Form
     private readonly Button _btnBrowse = new();
     private readonly Label _lblIdentify = new();
     private readonly ComboBox _cmbMode = new();
+    private readonly TabControl _modeTabs = new();
+    // which category of modes the combo currently shows; driven by the tab control
+    private enum ModeCategory { Tested, Experimental }
+    private ModeCategory _modeCategory = ModeCategory.Tested;
     private readonly Label _lblMode = new();
     private readonly TextBox _txtSeed = new();
     private readonly Button _btnSeed = new();
@@ -144,7 +148,7 @@ public sealed class MainForm : Form
     {
         var top = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
         top.RowStyles.Add(new RowStyle(SizeType.Absolute, 104f));  // disc
-        top.RowStyles.Add(new RowStyle(SizeType.Absolute, 116f));  // mode + seed
+        top.RowStyles.Add(new RowStyle(SizeType.Absolute, 150f));  // mode tabs + combo + seed
         top.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // features | options
         top.RowStyles.Add(new RowStyle(SizeType.Absolute, 58f));   // output
         top.RowStyles.Add(new RowStyle(SizeType.Absolute, 46f));   // run bar
@@ -187,40 +191,92 @@ public sealed class MainForm : Form
     private Control BuildModeGroup()
     {
         var gb = new GroupBox { Text = "Mode and seed", Dock = DockStyle.Fill };
-        var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 3, Padding = new Padding(6) };
+        var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 4, Padding = new Padding(6) };
         t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70f));
         t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
         t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110f));
-        t.RowStyles.Add(new RowStyle(SizeType.Absolute, 30f));
-        t.RowStyles.Add(new RowStyle(SizeType.Absolute, 30f));
-        t.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        t.RowStyles.Add(new RowStyle(SizeType.Absolute, 26f));   // category tabs
+        t.RowStyles.Add(new RowStyle(SizeType.Absolute, 30f));   // mode combo
+        t.RowStyles.Add(new RowStyle(SizeType.Absolute, 30f));   // seed
+        t.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // blurb
 
-        t.Controls.Add(new Label { Text = "Mode", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 0, 0);
+        // Category tabs filter the mode combo below. The gameplay tabs ('Tested',
+        // 'Experimental') repopulate the combo; the 'Summoner 2' tab is a disabled TBD marker.
+        _modeTabs.Dock = DockStyle.Fill;
+        _modeTabs.TabPages.Add(new TabPage("Tested") { ToolTipText = "Play-verified in game" });
+        _modeTabs.TabPages.Add(new TabPage("Experimental (untested)") { ToolTipText = "Builds, but not play-verified - help wanted testing these" });
+        var s2 = new TabPage("Summoner 2 — TBD") { ToolTipText = "Summoner 2 (SLUS-20448) support is not implemented yet" };
+        _modeTabs.TabPages.Add(s2);
+        _modeTabs.ShowToolTips = true;
+        _modeTabs.SelectedIndexChanged += (_, _) => OnModeTabChanged();
+        t.Controls.Add(_modeTabs, 0, 0);
+        t.SetColumnSpan(_modeTabs, 3);
+
+        t.Controls.Add(new Label { Text = "Mode", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 0, 1);
         _cmbMode.Dock = DockStyle.Fill;
         _cmbMode.DropDownStyle = ComboBoxStyle.DropDownList;
         _cmbMode.Enabled = false;
-        t.Controls.Add(_cmbMode, 1, 0);
+        t.Controls.Add(_cmbMode, 1, 1);
         t.SetColumnSpan(_cmbMode, 2);
 
-        t.Controls.Add(new Label { Text = "Seed", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 0, 1);
+        t.Controls.Add(new Label { Text = "Seed", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 0, 2);
         _txtSeed.Dock = DockStyle.Fill;
         _txtSeed.Font = new Font("Consolas", 10f);
         _txtSeed.CharacterCasing = CharacterCasing.Upper;
-        t.Controls.Add(_txtSeed, 1, 1);
+        t.Controls.Add(_txtSeed, 1, 2);
 
         _btnSeed.Text = "Random seed";
         _btnSeed.Dock = DockStyle.Fill;
-        t.Controls.Add(_btnSeed, 2, 1);
+        t.Controls.Add(_btnSeed, 2, 2);
 
         _lblMode.Text = "";
         _lblMode.Dock = DockStyle.Fill;
         _lblMode.ForeColor = SystemColors.GrayText;
         _lblMode.TextAlign = ContentAlignment.TopLeft;
-        t.Controls.Add(_lblMode, 0, 2);
+        t.Controls.Add(_lblMode, 0, 3);
         t.SetColumnSpan(_lblMode, 3);
 
         gb.Controls.Add(t);
         return gb;
+    }
+
+    // Which mode category the selected tab represents. Index 2 is the Summoner 2 TBD marker.
+    private void OnModeTabChanged()
+    {
+        if (_list is null) return;
+        int idx = _modeTabs.SelectedIndex;
+        if (idx == 2)   // Summoner 2 — TBD: no modes, disable the combo + build
+        {
+            _cmbMode.Items.Clear();
+            _cmbMode.Enabled = false;
+            _btnBuild.Enabled = false;
+            _lblMode.Text = "Summoner 2 (SLUS-20448) is not supported yet — TBD. "
+                          + "This tool currently randomizes Summoner 1 only.";
+            SetStatus("Summoner 2 support is not implemented yet (TBD).");
+            return;
+        }
+        _modeCategory = idx == 0 ? ModeCategory.Tested : ModeCategory.Experimental;
+        PopulateModeCombo();
+    }
+
+    // Fill the mode combo with only the modes in the current category (tested vs experimental).
+    private void PopulateModeCombo()
+    {
+        if (_list is null) return;
+        _cmbMode.BeginUpdate();
+        _cmbMode.Items.Clear();
+        foreach (var m in _list.Modes)
+        {
+            bool show = _modeCategory == ModeCategory.Tested ? m.Tested : !m.Tested;
+            if (show) _cmbMode.Items.Add(m);
+        }
+        _cmbMode.DisplayMember = nameof(ModeInfo.Display);
+        _cmbMode.Enabled = _cmbMode.Items.Count > 0;
+        _cmbMode.EndUpdate();
+        if (_cmbMode.Items.Count > 0)
+            _cmbMode.SelectedIndex = FirstBuildableMode();
+        else
+            _lblMode.Text = "No modes in this category.";
     }
 
     private Control BuildFeatureSplit()
@@ -442,21 +498,15 @@ public sealed class MainForm : Form
 
         _list = ListPayload.Parse(json);
 
-        _cmbMode.Items.Clear();
-        foreach (var m in _list.Modes)
-            _cmbMode.Items.Add(m);
-        _cmbMode.DisplayMember = nameof(ModeInfo.Display);
-        _cmbMode.Enabled = _cmbMode.Items.Count > 0;
-
         PopulateFeatures();
         PopulateBinaryPatches();
 
-        if (_cmbMode.Items.Count > 0)
-            // Default to the first BUILDABLE mode, not `vanilla`: vanilla is a reference
-            // baseline and the engine refuses to build it, so selecting it by default
-            // would greet the user with an error. `vanilla_no_tutorial` is the intended
-            // default - retail with exactly one lever moved.
-            _cmbMode.SelectedIndex = FirstBuildableMode();
+        // Default to the Tested tab (play-verified modes); the tab fills the combo and selects
+        // the first buildable mode. Fall back to Experimental if nothing is tested.
+        bool anyTested = _list.Modes.Any(m => m.Tested);
+        _modeTabs.SelectedIndex = anyTested ? 0 : 1;
+        _modeCategory = anyTested ? ModeCategory.Tested : ModeCategory.Experimental;
+        PopulateModeCombo();
 
         _txtPending.Text = BuildPendingText(_list);
         Log($"Loaded {_list.Modes.Count} modes, {_list.Transforms.Count} transforms, " +
@@ -892,19 +942,16 @@ public sealed class MainForm : Form
         ArgumentNullException.ThrowIfNull(list);
         _list = list;
 
-        _cmbMode.BeginUpdate();
-        _cmbMode.Items.Clear();
-        foreach (var m in _list.Modes)
-            _cmbMode.Items.Add(m);
-        _cmbMode.DisplayMember = nameof(ModeInfo.Display);
-        _cmbMode.Enabled = _cmbMode.Items.Count > 0;
-        _cmbMode.EndUpdate();
-
         PopulateFeatures();
         PopulateBinaryPatches();
 
-        if (_cmbMode.Items.Count > 0)
-            _cmbMode.SelectedIndex = IndexOfMode(modeKey ?? "vanilla");
+        // Pick the category/tab that contains the requested mode, then fill the combo from it.
+        var want = _list.Modes.FirstOrDefault(m => m.Key == (modeKey ?? "vanilla"));
+        _modeCategory = (want is { Tested: true }) ? ModeCategory.Tested : ModeCategory.Experimental;
+        _modeTabs.SelectedIndex = _modeCategory == ModeCategory.Tested ? 0 : 1;
+        PopulateModeCombo();
+        if (want is not null)
+            _cmbMode.SelectedIndex = IndexOfMode(want.Key);
 
         _txtPending.Text = BuildPendingText(_list);
         Log($"Loaded {_list.Modes.Count} modes, {_list.Transforms.Count} transforms, " +
